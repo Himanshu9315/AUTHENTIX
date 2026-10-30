@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "user.email_verified",
+  "description": "Payload of the user.email_verified event (inside the standard event envelope).",
+  "type": "object",
+  "required": ["userId"],
+  "properties": {
+    "userId": { "type": "string", "format": "uuid" }
+  },
+  "additionalProperties": false
+}

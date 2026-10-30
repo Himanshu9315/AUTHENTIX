@@ -7,13 +7,13 @@ import jwt from "jsonwebtoken";
 import { roleSchema } from "@authentix/schemas";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
 
-const PUBLIC_ROUTES = new Set(["POST /api/auth/register", "POST /api/auth/login", "POST /api/auth/refresh"]);
+const PUBLIC_ROUTES = new Set(["POST /api/auth/register", "POST /api/auth/login", "POST /api/auth/refresh", "POST /api/auth/verify-email"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const JWT_ISSUER = "authentix";
 export const JWT_AUDIENCE = "authentix-api";
 
 /**
- * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, trustProxy?: boolean } }} deps
+ * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
  * routes maps a path segment (e.g. "auth") to an upstream base URL.
  */
 export async function buildApp({ logger, config }) {
@@ -32,6 +32,8 @@ export async function buildApp({ logger, config }) {
     max: (req) => (isPublic(req) ? (config.authRateLimitMax ?? 10) : (config.rateLimitMax ?? 300)),
     keyGenerator: (req) => `${req.ip}:${isPublic(req) ? "auth" : "api"}`,
     timeWindow: "1 minute",
+    // Shared across gateway instances and restarts. Fails open if Redis is down (availability over throttling).
+    ...(config.redis ? { redis: config.redis, nameSpace: "rl:", skipOnError: true } : {}),
   });
   await app.register(replyFrom, { http: { requestOptions: { timeout: 10_000 } } });
 

@@ -19,6 +19,16 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   revoked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id uuid NOT NULL DEFAULT gen_random_uuid();
+CREATE INDEX IF NOT EXISTS refresh_tokens_family ON refresh_tokens (family_id);
+CREATE TABLE IF NOT EXISTS email_verifications (
+  token_hash text PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS email_verifications_user ON email_verifications (user_id, created_at);
 `;
 
 /** @param {string} connectionString */

@@ -20,6 +20,7 @@ const app = await buildApp({
     jwtSecret: env.JWT_SECRET,
     accessTtl: Number(env.ACCESS_TOKEN_TTL_SECONDS ?? 900),
     refreshTtlDays: Number(env.REFRESH_TOKEN_TTL_DAYS ?? 7),
+    exposeVerificationToken: env.DEV_EXPOSE_VERIFICATION_TOKEN === "true", // dev only, until notification-service sends the email
   },
 });
 
