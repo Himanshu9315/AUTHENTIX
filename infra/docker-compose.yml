@@ -114,6 +114,27 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  payment-service:
+    # Mock gateway. Internal only: not routed by the api-gateway and no published ports.
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: payment-service }
+    environment:
+      PORT: 3006
+      DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/payment
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?set in .env}
+      BOOKING_URL: http://booking-service:3005
+      PAYMENT_DELAY_MS: ${PAYMENT_DELAY_MS:-1000}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3006/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+
   auth-service:
     build:
       context: ..

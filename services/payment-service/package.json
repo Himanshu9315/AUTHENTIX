@@ -1,0 +1,17 @@
+{
+  "name": "@authentix/payment-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js && node --check src/instruments.js && node --check src/worker.js"
+  },
+  "dependencies": {
+    "@authentix/internal": "workspace:*",
+    "@authentix/logger": "workspace:*",
+    "fastify": "^5.0.0",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  }
+}
