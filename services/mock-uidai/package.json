@@ -1,0 +1,15 @@
+{
+  "name": "@authentix/mock-uidai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js && node --check src/app.js"
+  },
+  "dependencies": {
+    "@authentix/logger": "workspace:*",
+    "fastify": "^5.0.0",
+    "zod": "^3.23.8"
+  }
+}

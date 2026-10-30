@@ -9,6 +9,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432" # dev only: lets the integration tests reach Postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-authentix}"]
       interval: 5s
@@ -35,6 +37,42 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  mock-uidai:
+    # Fake UIDAI for dev only. Never deploy this.
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: mock-uidai }
+    environment:
+      PORT: 3010
+      MOCK_UIDAI_OTP: ${MOCK_UIDAI_OTP:-123456}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3010/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  aadhaar-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: aadhaar-service }
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/aadhaar
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-authentix}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      UIDAI_URL: http://mock-uidai:3010
+      AADHAAR_HASH_SECRET: ${AADHAAR_HASH_SECRET:?set in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mock-uidai: { condition: service_healthy }
 
   auth-service:
     build:
@@ -67,6 +105,7 @@ services:
       PORT: 3000
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       AUTH_SERVICE_URL: http://auth-service:3001
+      AADHAAR_SERVICE_URL: http://aadhaar-service:3002
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:5173
     ports:
@@ -78,6 +117,7 @@ services:
       retries: 10
     depends_on:
       auth-service: { condition: service_healthy }
+      aadhaar-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
 volumes:

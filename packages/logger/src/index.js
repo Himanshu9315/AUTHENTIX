@@ -7,6 +7,8 @@ const REDACT = [
   "*.password",
   "*.otp",
   "*.aadhaar",
+  "*.uid",
+  "*.txnId",
   "*.token",
   "*.accessToken",
   "*.refreshToken",

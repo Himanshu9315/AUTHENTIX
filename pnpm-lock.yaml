@@ -184,6 +184,24 @@ importers:
         specifier: ^3.23.0
         version: 3.25.76
 
+  services/aadhaar-service:
+    dependencies:
+      '@authentix/events':
+        specifier: workspace:*
+        version: link:../../packages/events
+      '@authentix/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@authentix/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      fastify:
+        specifier: ^5.0.0
+        version: 5.12.7
+      pg:
+        specifier: ^8.12.0
+        version: 8.23.1
+
   services/api-gateway:
     dependencies:
       '@authentix/logger':
@@ -234,6 +252,18 @@ importers:
       pg:
         specifier: ^8.12.0
         version: 8.23.1
+
+  services/mock-uidai:
+    dependencies:
+      '@authentix/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      fastify:
+        specifier: ^5.0.0
+        version: 5.12.7
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
 
 packages:
 

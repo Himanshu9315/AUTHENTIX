@@ -1,0 +1,11 @@
+{
+  "note": "Fictional test numbers. They start with 0 or 1, which real Aadhaar numbers never do. Never put real numbers here.",
+  "numbers": [
+    "100000000001", "100000000002", "100000000003", "100000000004", "100000000005",
+    "100000000006", "100000000007", "100000000008", "100000000009", "100000000010"
+  ],
+  "behaviours": {
+    "100000009001": "always fails with 503 (UIDAI outage)",
+    "100000009002": "responds slowly (4s delay)"
+  }
+}

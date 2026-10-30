@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "user.verified",
+  "description": "Payload of the user.verified event: the user completed Aadhaar verification. Carries no Aadhaar data.",
+  "type": "object",
+  "required": ["userId", "verifiedAt"],
+  "properties": {
+    "userId": { "type": "string", "format": "uuid" },
+    "verifiedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

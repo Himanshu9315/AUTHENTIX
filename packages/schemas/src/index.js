@@ -24,3 +24,11 @@ export const refreshSchema = z.object({
 export const verifyEmailSchema = z.object({
   token: z.string().min(20).max(200),
 });
+
+export const aadhaarOtpRequestSchema = z.object({
+  aadhaar: z.string().regex(/^\d{12}$/),
+});
+
+export const aadhaarVerifySchema = z.object({
+  otp: z.string().regex(/^\d{6}$/),
+});

@@ -14,6 +14,12 @@ run() {
   fi
 }
 
+# Integration tests need the dev Postgres (docker compose publishes it on localhost:5432).
+if [ -f .env ] && (exec 3<>/dev/tcp/127.0.0.1/5432) 2>/dev/null; then
+  set -a; . ./.env; set +a
+  export TEST_PG_URL="postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres"
+fi
+
 if [ -f pnpm-workspace.yaml ]; then
   run "js lint"  pnpm -r --if-present lint
   run "js test"  pnpm -r --if-present test

@@ -18,7 +18,10 @@ const app = await buildApp({
   config: {
     jwtSecret: env.JWT_SECRET,
     corsOrigins: (env.CORS_ORIGINS ?? "http://localhost:5173").split(","),
-    routes: { auth: env.AUTH_SERVICE_URL ?? "http://localhost:3001" },
+    routes: {
+      auth: env.AUTH_SERVICE_URL ?? "http://localhost:3001",
+      aadhaar: env.AADHAAR_SERVICE_URL ?? "http://localhost:3002",
+    },
     redis,
     trustProxy: env.TRUST_PROXY === "true",
   },
