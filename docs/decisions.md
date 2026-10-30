@@ -217,3 +217,59 @@ The `architect` agent (Opus) wrote the design note `docs/phase4-design.md`, with
 - **Placeholders left:** "My tickets" and the rotating QR arrive in Phase 5, and the footer's help and legal links are still placeholders.
 - **StrictMode lesson:** an early version of checkout stored an "unmounted" flag that stayed true under React StrictMode's dev-only mount, cleanup, mount sequence, which left the page loading forever in `pnpm dev` but not in the production build. A verifier caught it. The simulated-browser test now renders under StrictMode so dev and production behave the same.
 - **Seat focus:** a seat's focus ring is a thicker stroke plus an SVG outline, because the usual box-shadow ring does not draw on SVG.
+
+## Phase 5: Tickets, rotating QR, transfers, gate entry
+
+The `architect` agent wrote `docs/phase5-design.md` (full reasoning and SQL). Decisions D39 to D44 below follow it. Where I deviated, it says so.
+
+### D39. The rotating QR: derived secrets, 30-second codes, ticket-service is the only one with the key
+- **Chose:** one `QR_MASTER_KEY` in ticket-service. Each ticket's secret is calculated as `HMAC(master, "authentix:qr:v1:" + ticketId + ":" + version)` and never stored. The QR token is 41 bytes (55 characters, so the QR stays small and easy to scan): a format byte, the ticket id, the ticket version, the 30-second step number and a 16-byte signature.
+- **Why derived, not stored:** a leaked ticket database cannot be used to make QR codes. Binding the secret to the ticket's `version` means a transfer (version + 1) kills every old code the instant it commits, with nothing to delete or rotate.
+- **Why screenshots fail:** a code is accepted only for the current 30-second step and one either side (about 90 seconds at most), entry is one-time, and the gate shows the holder's name. One screenshot sent within 90 seconds could still get one person in. That small risk is accepted for v1.
+- **Why the phone gets 5 minutes of codes at once:** the browser fetches the next 10 codes and the server's clock from `GET /tickets/:id/qr`, so a venue with weak signal still works and the secret never reaches the browser. The alternative, fetching every 30 seconds, is stricter but fails in crowds.
+- **The signature is checked before expiry,** so a forged code learns nothing about which tickets exist.
+- **Revisit:** key rotation (a previous-key setting and a second format byte). If `QR_MASTER_KEY` leaks, every ticket is forgeable.
+
+### D40. Entry is one guarded database update
+- **Chose:** admission is a single `UPDATE ... WHERE id, version, event, status = 'active'`. If it changes a row, the scan is green. Otherwise a second query works out why (wrong event, already used, replaced, void).
+- **Why:** 20 gates scanning one code at the same moment serialise on that row, so exactly one is admitted. The test fires 20 at once. The same row guard decides a transfer racing a scan: whichever commits first wins.
+- **Retries:** each scan has a `scanId`. A scanner that never got an answer resends the same id and gets the same answer. A reused id with a different QR, gate or time is refused (422), so one ticket's green screen can never be replayed for another code. The request fingerprint is a keyed hash, so the QR itself is never stored.
+- **Clock handling:** a queued scan is judged at the moment it was captured, if it is under 120 seconds old, so a short network drop doesn't lose people but a late screenshot still fails. A scanner clock running ahead is clamped to the server's time.
+- **My deviation:** the design checked "already used" before "version replaced". I check the version first, so an old QR of a ticket that was transferred and then used says "ticket replaced" rather than "already used". It is the clearer message for staff.
+- **v1 rules:** no re-entry. Any staff user can scan any event inside the open window. The default window is 6 hours before the start to 12 hours after (D44 covers the demo override).
+- **Revisit:** per-event staff assignment (Phase 8), and whether `admin` may scan.
+
+### D41. Tickets are issued by a consumer that is safe to run twice
+- **Chose:** ticket-service reads `order.confirmed` from RabbitMQ. Every ticket has a deterministic `issue_key` (`orderId:seatId`, or `orderId:tier:ga:n`), so a redelivered message inserts nothing and emits nothing. Verified by hand: with ticket-service stopped, a confirmed order waited in the queue and its tickets appeared after a restart.
+- **The holder's name is a snapshot** ("Asha K.": first name plus last initial) taken when the ticket is issued or transferred. The gate never calls auth, and the full name is never stored in ticket-service.
+- **order.refunded is not consumed:** the saga never refunds an order that already reached CONFIRMED, so there are no tickets to void. Organiser cancellation (Phase 8) will need to void tickets and refund.
+
+### D42. A reusable message consumer in `@authentix/events`
+- **Chose:** `startConsumer` with a retry queue (a 10-second delay, then back to the main queue) and a parking queue. A failing handler is retried up to 8 times. A permanent error or malformed JSON goes straight to parked. A message is acknowledged only after its parked copy is confirmed, and a failed park puts it back instead of leaving it stuck.
+- **Verified live:** with auth-service stopped, a message failed twice and retried every 10 seconds, the ticket was issued after auth came back, and a message for an unknown user was parked.
+- **Delivery is at-least-once,** so handlers must be idempotent. The helper does not dedupe.
+
+### D43. Transfers: one transaction for the move, cap moved around it, and a generic refusal
+- **The move:** one transaction changes the owner, bumps the version, adds a history row and writes the `ticket.transferred` event. The old QR is dead at commit.
+- **Rules (as you approved):** at most 2 transfers per ticket, none within 24 hours of the event, only to a user who is verified on both email and Aadhaar, no price field anywhere, and a transferred ticket counts toward the recipient's per-event cap.
+- **Cap order is reserve first, release after:** the recipient's cap is reserved, then the ticket moves, then the sender's share is released. A crash in between can only over-count, so nobody can exceed the cap. A sweeper finishes or reverts anything left half-done. A revert that arrives before its reserve leaves a tombstone, so a late reserve can never apply.
+- **No enumeration:** an unknown email, an unverified recipient and a recipient whose cap is full all get the same 422 `recipient_not_eligible`. Known gap: the response time differs slightly between these cases, because they make different numbers of internal calls. I judged that hard to exploit and accepted it.
+- **Honest side effect:** a recipient whose cap is full gets the same vague message as a stranger, which can confuse a genuine friend. This was the architect's open question 4 and I kept the privacy.
+- **Limits:** the gateway allows 10 transfers per hour per signed-in user. A bug the verifier caught: the rate limiter returned 429 for every request until I fixed its check. The gateway now has a test that would have caught it.
+- **Remaining scalper route (Phase 8):** payment for a transfer happens off the platform, and releasing the sender's cap lets one buyer feed tickets to many verified friends. Each recipient's cap still applies. An anomaly flag on outgoing-transfer volume belongs in Phase 8.
+
+### D44. Who may scan: role rules at the gateway, checked again in the service
+- **Chose:** the gateway has a small role table (`/api/gate/` needs `staff`) and gate-service checks the role again itself, so a gateway mistake can't open the door. Ticket owners only ever see their own tickets, and anyone else's ticket id is a 404 rather than a 403 so ids can't be probed.
+- **Demo staff:** `pnpm seed` creates `gate.staff@example.test` with the password from `DEMO_STAFF_PASSWORD` in `.env`. The script refuses to run in production and has no default password. auth-service has no admin API yet.
+- **Demo window:** the real rule is that the gate opens 6 hours before the event, but transfers close 24 hours before, so a demo of "transfer, then the old QR is rejected" can't happen on the real rule. `GATE_OPEN_BEFORE_HOURS` and `GATE_OPEN_AFTER_HOURS` default to 6 and 12 and are widened (2000 hours) only in the git-ignored dev `.env`.
+
+### D45. Phase 5 client decisions
+- **Entry code screen:** the code switches every 30 seconds on the server's clock (so a wrong device clock doesn't matter), shows a countdown, tops up its 5-minute batch before it runs out, refreshes when the tab becomes visible again, and notices within 5 seconds if the gate scans the ticket or it is transferred away. Codes live only in memory, never in storage or URLs.
+- **Transfer dialog:** two steps (enter, then confirm what happens), one idempotency key held until the server gives a definite answer, and the same vague wording for refusals.
+- **My tickets waits for new purchases:** tickets are issued a moment after payment, so an empty list keeps checking for about 30 seconds before saying there are none. I found this by testing with the simulated browser.
+- **Scanner:** a separate app (`apps/scanner`, port 8081) that reuses the web app's design tokens. Staff sign in (customer accounts are refused), choose an event and name their gate, and scan with the camera (the browser's `BarcodeDetector`, with `jsQR` as a fallback). Results are a full-screen green ALLOW or red STOP with the reason, and amber when there is no connection. A paste box covers demos and blocked cameras.
+- **Offline behaviour:** there is no offline admission, because that would put secrets on staff devices. A scan that can't reach the server is queued with its `scanId` and retried (1, 2, 4, 8 seconds) for up to 2 minutes, then the staff member is asked to rescan. A queued QR is kept in local storage only until there is an answer, it gives up, or the staff member signs out or leaves the screen (they are asked to confirm first, because unsent scans are lost). Leftovers from a closed tab are purged when the app next starts. The staff login is kept in session storage so it is forgotten when the tab closes. A scan that cannot be stored shows a red "Rescan needed" rather than promising a retry.
+- **Network trouble is never treated as an answer:** a timeout, a 5xx, a 429, or a failed token refresh makes the scanner queue and retry with the same `scanId`. Only a definite 401/403 from the server ends the shift, and a customer account that signs in by mistake has its session revoked straight away.
+- **Event picker:** it lists all upcoming events and the server decides whether the gate is open (`event_not_open`). The design suggested filtering the list to the open window, but the window is configurable on the server (D44), so the client can't know it.
+- **Camera needs HTTPS:** `http://localhost:8081` works on a laptop. A phone on the local network would need HTTPS, which I did not set up.
+- **How it was tested:** the real apps were driven in a simulated browser against the live stack, and the decoder was checked against a real QR code at full and 40 percent size. **Not tested:** real cameras, real phones, and visual polish. A harness lesson: the simulated browser must create its fake browser before React loads, or typed input silently does nothing.

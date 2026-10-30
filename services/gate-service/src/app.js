@@ -29,7 +29,8 @@ export async function buildApp({ pool, clients, logger, now = Date.now, config =
   // A gate scans only around the event. Default: from 6 h before to 12 h after the start. Widened in the dev .env so a demo can scan any event.
   const OPEN_BEFORE_MS = (config.openBeforeHours ?? 6) * 3_600_000;
   const OPEN_AFTER_MS = (config.openAfterHours ?? 12) * 3_600_000;
-  const fingerprint = (b) => createHmac("sha256", config.hashSecret ?? "dev-only-scan-hash-secret").update(`${b.token}|${b.gateId}|${b.scannedAt}`).digest("hex");
+  if (!config.hashSecret) throw new Error("gate-service needs config.hashSecret");
+  const fingerprint = (b) => createHmac("sha256", config.hashSecret).update(`${b.token}|${b.gateId}|${b.scannedAt}`).digest("hex");
   const app = Fastify({
     loggerInstance: logger,
     genReqId: (req) => {

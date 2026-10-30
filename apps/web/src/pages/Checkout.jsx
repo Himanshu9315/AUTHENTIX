@@ -172,8 +172,11 @@ export default function Checkout() {
       <Shell title="You're going! 🎉" icon>
         <p className="text-body1 text-ink-secondary">Payment received and your tickets are confirmed.</p>
         <div className="mt-4">{summary}</div>
-        <p className="mt-3 text-body3 text-ink-tertiary">Order {order.id.slice(0, 8)}. Your tickets with a rotating entry code arrive in the next release.</p>
-        <Link to="/" className="mt-6 inline-block rounded-full bg-brand px-6 py-3 text-title3 text-brand-on">Keep exploring</Link>
+        <p className="mt-3 text-body3 text-ink-tertiary">Order {order.id.slice(0, 8)}. Your tickets, with a rotating entry code, appear in My tickets within a few seconds.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link to="/tickets" className="rounded-full bg-brand px-6 py-3 text-title3 text-brand-on">View my tickets</Link>
+          <Link to="/" className="rounded-full border border-line-moderate px-6 py-3 text-title3 text-ink">Keep exploring</Link>
+        </div>
       </Shell>
     );
   }

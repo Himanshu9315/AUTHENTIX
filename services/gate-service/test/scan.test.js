@@ -32,7 +32,7 @@ describe("gate scans", { skip }, () => {
     const url = new URL(adminUrl);
     url.pathname = `/${dbName}`;
     pool = await createPool(url.toString());
-    app = await buildApp({ pool, clients, logger: silent });
+    app = await buildApp({ pool, clients, logger: silent, config: { hashSecret: "test-scan-hash-secret" } });
   });
   after(async () => {
     await app?.close();

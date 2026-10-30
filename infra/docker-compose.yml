@@ -281,5 +281,16 @@ services:
     depends_on:
       api-gateway: { condition: service_healthy }
 
+  scanner:
+    # Gate staff app. The camera needs a secure context: http://localhost:8081 works, a phone over the network needs HTTPS.
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args: { APP: scanner }
+    ports:
+      - "8081:80"
+    depends_on:
+      api-gateway: { condition: service_healthy }
+
 volumes:
   pgdata:

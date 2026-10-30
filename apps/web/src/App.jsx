@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound.jsx";
 import Login from "./pages/Login.jsx";
 import Verify from "./pages/Verify.jsx";
 import Checkout from "./pages/Checkout.jsx";
+import MyTickets from "./pages/MyTickets.jsx";
 import ActiveOrderBanner from "./components/ActiveOrderBanner.jsx";
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/register" element={<Login mode="register" />} />
           <Route path="/verify" element={<Verify />} />
           <Route path="/checkout/:id" element={<Checkout />} />
+          <Route path="/tickets" element={<MyTickets />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

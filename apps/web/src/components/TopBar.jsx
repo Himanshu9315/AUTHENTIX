@@ -42,6 +42,7 @@ export default function TopBar() {
         <div className="ml-auto flex items-center gap-1 md:ml-0">
           {signedIn ? (
             <>
+              <Link to="/tickets" className="rounded-full px-3 py-2 text-label1 text-ink hover:bg-bg-secondary">My tickets</Link>
               <Link to="/verify" className="hidden rounded-full px-3 py-2 text-label1 text-ink hover:bg-bg-secondary sm:block">{user?.name?.split(" ")[0] ?? "Account"}</Link>
               <button type="button" onClick={logout} className="rounded-full px-3 py-2 text-label1 text-ink-secondary hover:bg-bg-secondary">Sign out</button>
             </>
