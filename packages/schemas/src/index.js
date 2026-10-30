@@ -79,3 +79,40 @@ export const orderRefundedSchema = z
     refundedAt: z.string().datetime(),
   })
   .strict();
+
+// Events emitted by ticket-service. Mirrors contracts/ticket.*.schema.json.
+export const ticketIssuedSchema = z
+  .object({
+    orderId: z.string().uuid(),
+    userId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    ticketIds: z.array(z.string().uuid()).min(1),
+    issuedAt: z.string().datetime(),
+  })
+  .strict();
+
+export const ticketTransferredSchema = z
+  .object({
+    transferId: z.string().uuid(),
+    ticketId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    fromUserId: z.string().uuid(),
+    toUserId: z.string().uuid(),
+    newVersion: z.number().int().min(2),
+    transferredAt: z.string().datetime(),
+  })
+  .strict();
+
+/** Why a gate scan was rejected. A closed list, so the scanner can show a clear message for each. */
+export const SCAN_REASONS = /** @type {const} */ (["invalid_qr", "qr_expired", "scan_stale", "wrong_event", "already_used", "ticket_replaced", "ticket_void", "event_not_open"]);
+export const scanReasonSchema = z.enum(SCAN_REASONS);
+
+export const scanRequestSchema = z.object({
+  scanId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  gateId: z.string().min(1).max(32),
+  token: z.string().min(1).max(100),
+  scannedAt: z.string().datetime(),
+});
+
+export const transferRequestSchema = z.object({ recipientEmail: emailSchema });

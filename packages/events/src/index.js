@@ -138,3 +138,114 @@ export function startOutboxRelay({ pool, url, logger, intervalMs = 1000 }) {
     },
   };
 }
+
+/** Throw from a consumer handler for a message that can never succeed (it is parked, not retried). */
+export class PermanentError extends Error {}
+
+/**
+ * Durable queue consumer with delayed retries and a parking queue, in the same reconnect style as the relay.
+ * Topology: `queue` (bound to the events exchange), `queue.retry` (message TTL, dead-letters back to `queue`)
+ * and `queue.parked` (no consumer; inspect by hand). A handler error nacks into the retry queue; after
+ * `maxAttempts` failures, a PermanentError or malformed JSON the message is parked. Handlers must be idempotent
+ * (delivery is at-least-once) and should dispatch on `event.type`, because the routing key changes after a retry hop.
+ * @param {{ url: string, logger: { error: Function, info: Function, warn: Function }, queue: string, bindings: string[], handler: (event: { id: string, type: string, occurredAt: string, requestId?: string, payload: any }) => Promise<void>, prefetch?: number, maxAttempts?: number, retryDelayMs?: number }} opts
+ * @returns {{ stop: () => Promise<void>, isHealthy: () => boolean }}
+ */
+export function startConsumer({ url, logger, queue, bindings, handler, prefetch = 10, maxAttempts = 8, retryDelayMs = 10_000 }) {
+  let stopped = false;
+  let conn = null;
+  let ch = null;
+  let reconnectTimer = null;
+  let attempt = 0;
+
+  const scheduleReconnect = () => {
+    ch = null;
+    const old = conn;
+    conn = null;
+    old?.removeAllListeners("close");
+    old?.close().catch(() => {});
+    if (stopped || reconnectTimer) return;
+    const delay = Math.min(30_000, 1000 * 2 ** attempt++);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  };
+
+  const park = (channel, msg, reason) =>
+    new Promise((resolve, reject) =>
+      channel.sendToQueue(`${queue}.parked`, msg.content, { persistent: true, headers: { "x-parked-reason": reason } }, (err) => (err ? reject(err) : resolve(undefined))),
+    );
+
+  const onMessage = async (channel, msg) => {
+    if (!msg) return;
+    let event;
+    try {
+      event = JSON.parse(msg.content.toString());
+    } catch {
+      await park(channel, msg, "malformed json");
+      return channel.ack(msg);
+    }
+    // Number of earlier failed attempts, counted by RabbitMQ in the x-death header.
+    const deaths = (msg.properties.headers?.["x-death"] ?? []).find((d) => d.queue === queue && d.reason === "rejected")?.count ?? 0;
+    try {
+      await handler(event);
+      channel.ack(msg);
+    } catch (err) {
+      const permanent = err instanceof PermanentError;
+      if (permanent || deaths + 1 >= maxAttempts) {
+        logger.error({ eventId: event?.id, type: event?.type, permanent, err: err.message }, "message parked");
+        await park(channel, msg, permanent ? err.message : "max attempts reached");
+        channel.ack(msg);
+      } else {
+        logger.warn({ eventId: event?.id, type: event?.type, attempt: deaths + 1, err: err.message }, "handler failed; will retry");
+        channel.nack(msg, false, false); // dead-letters into the retry queue
+      }
+    }
+  };
+
+  const connect = async () => {
+    if (stopped) return;
+    try {
+      const c = await amqp.connect(url);
+      if (stopped) return void (await c.close().catch(() => {}));
+      conn = c;
+      c.on("error", (err) => logger.error({ err }, "rabbitmq connection error"));
+      c.on("close", scheduleReconnect);
+      const channel = await c.createConfirmChannel();
+      channel.on("error", (err) => logger.error({ err }, "rabbitmq channel error"));
+      channel.on("close", () => {
+        if (ch === channel) scheduleReconnect();
+      });
+      await channel.assertExchange(EXCHANGE, "topic", { durable: true });
+      await channel.assertQueue(`${queue}.parked`, { durable: true });
+      await channel.assertQueue(`${queue}.retry`, { durable: true, arguments: { "x-message-ttl": retryDelayMs, "x-dead-letter-exchange": "", "x-dead-letter-routing-key": queue } });
+      await channel.assertQueue(queue, { durable: true, arguments: { "x-dead-letter-exchange": "", "x-dead-letter-routing-key": `${queue}.retry` } });
+      for (const key of bindings) await channel.bindQueue(queue, EXCHANGE, key);
+      await channel.prefetch(prefetch);
+      if (stopped) return;
+      await channel.consume(queue, (msg) => {
+        onMessage(channel, msg).catch((err) => logger.error({ err }, "consumer failure"));
+      });
+      ch = channel;
+      attempt = 0;
+    } catch (err) {
+      logger.error({ err }, "rabbitmq consumer connect failed, retrying");
+      scheduleReconnect();
+    }
+  };
+
+  connect();
+  return {
+    isHealthy: () => ch !== null,
+    stop: async () => {
+      stopped = true;
+      clearTimeout(reconnectTimer);
+      const c = conn;
+      conn = null;
+      ch = null;
+      c?.removeAllListeners("close");
+      await c?.close().catch(() => {});
+    },
+  };
+}

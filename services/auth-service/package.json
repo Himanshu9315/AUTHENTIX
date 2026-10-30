@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js"
+    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js",
+    "seed": "node seed/seed-staff.js"
   },
   "dependencies": {
     "@authentix/events": "workspace:*",

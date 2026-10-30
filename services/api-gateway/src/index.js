@@ -25,6 +25,8 @@ const app = await buildApp({
       // Only routed once the service is deployed (compose sets these), so /readyz never waits on a missing service.
       ...(env.INVENTORY_SERVICE_URL ? { inventory: env.INVENTORY_SERVICE_URL } : {}),
       ...(env.BOOKING_SERVICE_URL ? { booking: env.BOOKING_SERVICE_URL } : {}),
+      ...(env.TICKET_SERVICE_URL ? { tickets: env.TICKET_SERVICE_URL } : {}),
+      ...(env.GATE_SERVICE_URL ? { gate: env.GATE_SERVICE_URL } : {}),
     },
     redis,
     trustProxy: env.TRUST_PROXY === "true",

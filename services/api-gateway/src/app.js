@@ -8,12 +8,15 @@ import { roleSchema } from "@authentix/schemas";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
 
 const PUBLIC_ROUTES = new Set(["POST /api/auth/register", "POST /api/auth/login", "POST /api/auth/refresh", "POST /api/auth/verify-email"]);
+// Routes that need a specific role (first matching prefix wins). Anything else only needs a signed-in user.
+const ROLE_RULES = [{ prefix: "/api/gate/", roles: ["staff"] }];
+const TRANSFER_PATH = /^\/api\/tickets\/[^/]+\/transfer$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const JWT_ISSUER = "authentix";
 export const JWT_AUDIENCE = "authentix-api";
 
 /**
- * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
+ * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, transferLimitPerHour?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
  * routes maps a path segment (e.g. "auth") to an upstream base URL.
  */
 export async function buildApp({ logger, config }) {
@@ -36,6 +39,12 @@ export async function buildApp({ logger, config }) {
     timeWindow: "1 minute",
     // Shared across gateway instances and restarts. Fails open if Redis is down (availability over throttling).
     ...(config.redis ? { redis: config.redis, nameSpace: "rl:", skipOnError: true } : {}),
+  });
+  const transferLimiter = app.createRateLimit({
+    max: config.transferLimitPerHour ?? 10,
+    timeWindow: "1 hour",
+    keyGenerator: (req) => `transfer:${req.userId}`,
+    ...(config.redis ? { redis: config.redis, nameSpace: "rl-transfer:", skipOnError: true } : {}),
   });
   await app.register(replyFrom, { http: { requestOptions: { timeout: 10_000 } } });
 
@@ -94,8 +103,16 @@ export async function buildApp({ logger, config }) {
         if (typeof claims.sub !== "string" || !UUID.test(claims.sub)) throw new Error("bad sub");
         headers["x-user-id"] = claims.sub;
         headers["x-user-role"] = roleSchema.parse(claims.role);
+        req.userId = claims.sub;
       } catch {
         return reply.code(401).send({ error: "unauthorized" });
+      }
+      const rule = ROLE_RULES.find((r) => decoded.startsWith(r.prefix));
+      if (rule && !rule.roles.includes(headers["x-user-role"])) return reply.code(403).send({ error: "forbidden" });
+      // Transfers are limited per signed-in user, not per IP, so one person can't fan tickets out to many accounts quickly.
+      if (req.method === "POST" && TRANSFER_PATH.test(decoded) && transferLimiter) {
+        const verdict = await transferLimiter(req);
+        if (!verdict.isAllowed) return reply.code(429).send({ error: "rate_limited" });
       }
     }
 

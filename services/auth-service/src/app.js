@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
-import { loginSchema, refreshSchema, registerSchema, verifyEmailSchema } from "@authentix/schemas";
+import { emailSchema, loginSchema, refreshSchema, registerSchema, verifyEmailSchema } from "@authentix/schemas";
 import { writeOutbox } from "@authentix/events";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
 import { requireInternalToken } from "@authentix/internal";
@@ -262,6 +262,15 @@ export async function buildApp({ pool, logger, relay, config }) {
     const { rows } = await pool.query("SELECT name, email_verified FROM users WHERE id = $1", [req.params.id]);
     if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
     return { name: rows[0].name, emailVerified: rows[0].email_verified };
+  });
+
+  // Ticket transfers look up a recipient by email. Internal only; the public API never reveals who an email belongs to.
+  app.post("/internal/users/lookup", { preHandler: requireInternalToken(config.internalToken) }, async (req, reply) => {
+    const email = emailSchema.safeParse(req.body?.email);
+    if (!email.success) return reply.code(400).send({ error: "validation_error" });
+    const { rows } = await pool.query("SELECT id, name, email_verified FROM users WHERE email = $1", [email.data]);
+    if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
+    return { id: rows[0].id, name: rows[0].name, emailVerified: rows[0].email_verified };
   });
 
   return app;

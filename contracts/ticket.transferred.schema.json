@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ticket.transferred",
+  "description": "Payload of ticket.transferred: a ticket moved to another verified user and its QR was replaced. Ids only.",
+  "type": "object",
+  "required": [
+    "transferId",
+    "ticketId",
+    "eventId",
+    "fromUserId",
+    "toUserId",
+    "newVersion",
+    "transferredAt"
+  ],
+  "properties": {
+    "transferId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "ticketId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "fromUserId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "toUserId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "newVersion": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "transferredAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

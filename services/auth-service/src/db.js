@@ -1,7 +1,7 @@
 import pg from "pg";
 import { OUTBOX_DDL } from "@authentix/events";
 
-const SCHEMA = `
+export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text NOT NULL UNIQUE,
