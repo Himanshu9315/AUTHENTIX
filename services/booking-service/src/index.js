@@ -4,6 +4,7 @@ import { startOutboxRelay } from "@authentix/events";
 import { buildApp } from "./app.js";
 import { createClients } from "./clients.js";
 import { createPool } from "./db.js";
+import { createCapTransfers } from "./captransfer.js";
 import { createSaga } from "./saga.js";
 
 const logger = createLogger("booking-service");
@@ -26,7 +27,8 @@ const clients = createClients({
   },
 });
 const saga = createSaga({ pool, clients, logger, config: { holdTtlSeconds: Number(env.HOLD_TTL_SECONDS ?? 480), hashSecret: createHmac("sha256", env.PAYMENT_WEBHOOK_SECRET).update("pay-hash:v1").digest("hex") } });
-const app = await buildApp({ pool, saga, logger, relay, config: { webhookSecret: env.PAYMENT_WEBHOOK_SECRET } });
+const capTransfers = createCapTransfers({ pool, clients, logger });
+const app = await buildApp({ pool, saga, capTransfers, logger, relay, config: { webhookSecret: env.PAYMENT_WEBHOOK_SECRET, internalToken: env.INTERNAL_TOKEN } });
 
 // Settles anything stuck: lost callbacks, crashes mid-saga, expired holds.
 let sweeping = false;

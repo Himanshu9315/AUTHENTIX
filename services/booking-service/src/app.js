@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
+import { requireInternalToken } from "@authentix/internal";
 import { SagaError } from "./saga.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
@@ -32,9 +33,9 @@ const payBody = z
 const callbackBody = z.object({ paymentId: uuid, orderId: uuid, status: z.enum(["succeeded", "failed", "cancelled"]), occurredAt: z.string() });
 
 /**
- * @param {{ pool: import("pg").Pool, saga: ReturnType<import("./saga.js").createSaga>, logger: any, relay?: { isHealthy: () => boolean }, config: { webhookSecret: string } }} deps
+ * @param {{ pool: import("pg").Pool, saga: ReturnType<import("./saga.js").createSaga>, capTransfers?: ReturnType<import("./captransfer.js").createCapTransfers>, logger: any, relay?: { isHealthy: () => boolean }, config: { webhookSecret: string, internalToken?: string } }} deps
  */
-export async function buildApp({ pool, saga, logger, relay, config }) {
+export async function buildApp({ pool, saga, capTransfers, logger, relay, config }) {
   const app = Fastify({
     loggerInstance: logger,
     genReqId: (req) => {
@@ -161,6 +162,15 @@ export async function buildApp({ pool, saga, logger, relay, config }) {
     await saga.applyPayment(body.data.orderId, body.data.paymentId, body.data.status, req.id);
     return { ok: true };
   });
+
+  // ticket-service moves cap between holders during a ticket transfer. Internal only.
+  if (capTransfers && config.internalToken) {
+    const internal = { preHandler: requireInternalToken(config.internalToken) };
+    const send = (reply, r) => reply.code(r.status).send(r.body);
+    app.post("/internal/cap-transfers", internal, async (req, reply) => send(reply, await capTransfers.reserve(req.body, req.id)));
+    app.post("/internal/cap-transfers/:id/commit", internal, async (req, reply) => send(reply, await capTransfers.commit(req.params.id)));
+    app.post("/internal/cap-transfers/:id/revert", internal, async (req, reply) => send(reply, await capTransfers.revert(req.params.id, req.body)));
+  }
 
   return app;
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js && node --check src/saga.js && node --check src/clients.js",
+    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js && node --check src/saga.js && node --check src/clients.js && node --check src/captransfer.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {

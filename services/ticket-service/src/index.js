@@ -5,6 +5,7 @@ import { createAdmitter } from "./admission.js";
 import { createClients } from "./clients.js";
 import { createPool } from "./db.js";
 import { createIssuer } from "./issue.js";
+import { createTransfers } from "./transfers.js";
 
 const logger = createLogger("ticket-service");
 const env = process.env;
@@ -30,10 +31,26 @@ const clients = createClients({
 const relay = startOutboxRelay({ pool, url: env.RABBITMQ_URL, logger });
 const consumer = startConsumer({ url: env.RABBITMQ_URL, logger, queue: "ticket-service", bindings: ["order.confirmed"], handler: createIssuer({ pool, clients }) });
 const admit = createAdmitter({ pool, masterKey, graceSeconds: Number(env.SCAN_GRACE_SECONDS ?? 120) });
-const app = await buildApp({ pool, logger, consumer, relay, admit, config: { masterKey, internalToken: env.INTERNAL_TOKEN } });
+const transfers = createTransfers({ pool, clients, logger });
+const app = await buildApp({ pool, logger, consumer, relay, admit, transfers, config: { masterKey, internalToken: env.INTERNAL_TOKEN } });
+
+// Finishes or reverts transfers a crash left half-done.
+let sweeping = false;
+const sweeper = setInterval(async () => {
+  if (sweeping) return;
+  sweeping = true;
+  try {
+    await transfers.sweepOnce();
+  } catch (err) {
+    logger.error({ err }, "transfer sweeper failed");
+  } finally {
+    sweeping = false;
+  }
+}, 5000);
 
 for (const sig of ["SIGTERM", "SIGINT"]) {
   process.once(sig, async () => {
+    clearInterval(sweeper);
     await consumer.stop();
     await relay.stop();
     await app.close();

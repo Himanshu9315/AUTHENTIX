@@ -192,6 +192,29 @@ services:
       rabbitmq: { condition: service_healthy }
       auth-service: { condition: service_healthy }
 
+  gate-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: gate-service }
+    environment:
+      PORT: 3008
+      DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/gate
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      TICKET_SERVICE_URL: http://ticket-service:3007
+      GATE_OPEN_BEFORE_HOURS: ${GATE_OPEN_BEFORE_HOURS:-6}
+      GATE_OPEN_AFTER_HOURS: ${GATE_OPEN_AFTER_HOURS:-12}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3008/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+      ticket-service: { condition: service_healthy }
+      catalog-service: { condition: service_healthy }
+
   auth-service:
     build:
       context: ..
@@ -229,6 +252,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:3004
       BOOKING_SERVICE_URL: http://booking-service:3005
       TICKET_SERVICE_URL: http://ticket-service:3007
+      GATE_SERVICE_URL: http://gate-service:3008
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:5173
     ports:
@@ -245,6 +269,7 @@ services:
       inventory-service: { condition: service_healthy }
       booking-service: { condition: service_healthy }
       ticket-service: { condition: service_healthy }
+      gate-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   web:

@@ -46,6 +46,18 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
   PRIMARY KEY (order_id, attempt_no),
   UNIQUE (order_id, idempotency_key)
 );
+-- A ticket transfer moves one unit of the per-event cap from the sender's Aadhaar to the recipient's.
+-- 'reserved' = recipient charged, sender not yet released (over-counts, never under-counts).
+-- 'reverted' rows may be tombstones: a revert that arrived before its reserve, so the late reserve can never apply.
+CREATE TABLE IF NOT EXISTS cap_transfers (
+  id uuid PRIMARY KEY,
+  event_id uuid NOT NULL,
+  from_key text NOT NULL,
+  to_key text NOT NULL,
+  state text NOT NULL CHECK (state IN ('reserved','committed','reverted')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS cap_usage (
   event_id uuid NOT NULL,
   holder_key text NOT NULL,
