@@ -245,6 +245,52 @@ services:
       aadhaar-service: { condition: service_healthy }
       catalog-service: { condition: service_healthy }
 
+  chatbot-db:
+    # The chatbot's own Postgres. The main one has no pgvector, which the help-search needs, and the help index is
+    # disposable (rebuilt from the FAQ files and the catalog), so it lives in its own container and volume.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-authentix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: chatbot
+    volumes:
+      - chatbotpg:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432" # dev only: lets the chatbot tests reach it
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-authentix} -d chatbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  chatbot-service:
+    build:
+      context: ..
+      dockerfile: services/chatbot-service/Dockerfile
+      target: run
+    environment:
+      PORT: 3011
+      DATABASE_URL: postgresql://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@chatbot-db:5432/chatbot
+      CATALOG_URL: http://catalog-service:3003
+      INVENTORY_URL: http://inventory-service:3004
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:8080}
+      # Empty is fine: the bot then answers from the help articles without Gemini.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-gemini-embedding-2}
+      GEMINI_EMBED_DIMENSIONS: ${GEMINI_EMBED_DIMENSIONS:-768}
+    healthcheck:
+      # the slim Python image has no wget or curl
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3011/healthz', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      chatbot-db: { condition: service_healthy }
+      catalog-service: { condition: service_healthy }
+      inventory-service: { condition: service_healthy }
+
   mailpit:
     # Dev email inbox (the maintained successor to MailHog, same ports). Nothing is ever delivered to a real address.
     # Read the mail at http://localhost:8025
@@ -323,6 +369,7 @@ services:
       GATE_SERVICE_URL: http://gate-service:3008
       QUEUE_SERVICE_URL: http://queue-service:3009
       NOTIFICATION_SERVICE_URL: http://notification-service:3012
+      CHAT_SERVICE_URL: http://chatbot-service:3011
       # nginx (the web containers) is the gateway's only client and sets the real visitor address, so trust it:
       # otherwise every browser shares one rate-limit bucket. The gateway's own port is bound to localhost below.
       TRUST_PROXY: "true"
@@ -345,6 +392,7 @@ services:
       gate-service: { condition: service_healthy }
       queue-service: { condition: service_healthy }
       notification-service: { condition: service_healthy }
+      chatbot-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   web:
@@ -368,4 +416,5 @@ services:
       api-gateway: { condition: service_healthy }
 
 volumes:
+  chatbotpg:
   pgdata:

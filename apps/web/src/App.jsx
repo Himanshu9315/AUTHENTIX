@@ -11,7 +11,10 @@ import Verify from "./pages/Verify.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import MyTickets from "./pages/MyTickets.jsx";
 import WaitingRoom from "./pages/WaitingRoom.jsx";
+import VerifyEmail from "./pages/VerifyEmail.jsx";
+import Notifications from "./pages/Notifications.jsx";
 import ActiveOrderBanner from "./components/ActiveOrderBanner.jsx";
+import ChatWidget from "./components/ChatWidget.jsx";
 
 export default function App() {
   const { pathname } = useLocation();
@@ -33,11 +36,14 @@ export default function App() {
           <Route path="/verify" element={<Verify />} />
           <Route path="/checkout/:id" element={<Checkout />} />
           <Route path="/tickets" element={<MyTickets />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/queue/:slug" element={<WaitingRoom />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <Footer />
+      <ChatWidget />
     </>
   );
 }

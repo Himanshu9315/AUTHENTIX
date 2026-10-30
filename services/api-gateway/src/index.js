@@ -29,9 +29,11 @@ const app = await buildApp({
       ...(env.GATE_SERVICE_URL ? { gate: env.GATE_SERVICE_URL } : {}),
       ...(env.QUEUE_SERVICE_URL ? { queue: env.QUEUE_SERVICE_URL } : {}),
       ...(env.NOTIFICATION_SERVICE_URL ? { notifications: env.NOTIFICATION_SERVICE_URL } : {}),
+      ...(env.CHAT_SERVICE_URL ? { chat: env.CHAT_SERVICE_URL } : {}),
     },
     redis,
     trustProxy: env.TRUST_PROXY === "true",
+    chatRateLimitMax: Number(env.CHAT_RATE_LIMIT_MAX ?? 20),
   },
 });
 

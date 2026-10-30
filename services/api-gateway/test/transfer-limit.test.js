@@ -72,6 +72,19 @@ describe("gateway: transfer rate limit and role rules", () => {
     assert.deepEqual([full.statusCode, full.json().received, full.json().length], [200, exact, String(Buffer.byteLength(exact))]);
   });
 
+  test("the help chat is the one public POST, with its own tight limit; everything else under /api/chat needs a sign-in", async () => {
+    const chat = await buildApp({ logger: silent, config: { jwtSecret: SECRET, corsOrigins: [], routes: { chat: `http://127.0.0.1:${port}`, tickets: `http://127.0.0.1:${port}` }, chatRateLimitMax: 3, rateLimitMax: 100 } });
+    const post = (url = "/api/chat/messages") => chat.inject({ method: "POST", url, headers: { "content-type": "application/json" }, payload: JSON.stringify({ message: "hi" }) });
+    assert.deepEqual([(await post()).statusCode, (await post()).statusCode, (await post()).statusCode, (await post()).statusCode], [200, 200, 200, 429]);
+    assert.equal((await post("/api/chat/other")).statusCode, 401); // not the chat endpoint: needs a JWT
+    assert.equal((await chat.inject({ method: "GET", url: "/api/chat/messages" })).statusCode, 401);
+    assert.equal((await chat.inject({ method: "GET", url: "/api/chat/healthz" })).statusCode, 401);
+    assert.equal((await chat.inject({ method: "POST", url: "/api/chat/internal/reindex" })).statusCode, 404); // internal paths never route
+    const seen = await chat.inject({ method: "POST", url: "/api/chat/messages?x=1", headers: { "content-type": "application/json", "x-user-id": "spoofed", "x-user-role": "admin" }, payload: "{}" });
+    assert.equal(seen.statusCode, 429); // the query string doesn't give a fresh bucket
+    await chat.close();
+  });
+
   test("only staff reach /api/gate/*", async () => {
     const as = (role) => app.inject({ method: "GET", url: "/api/gate/events/x/stats", headers: { authorization: `Bearer ${token(randomUUID(), role)}` } });
     assert.equal((await as("attendee")).statusCode, 403);

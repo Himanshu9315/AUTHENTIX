@@ -16,7 +16,7 @@ export const JWT_ISSUER = "authentix";
 export const JWT_AUDIENCE = "authentix-api";
 
 /**
- * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, transferLimitPerHour?: number, queueRateLimitMax?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
+ * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, transferLimitPerHour?: number, queueRateLimitMax?: number, chatRateLimitMax?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
  * routes maps a path segment (e.g. "auth") to an upstream base URL.
  */
 export async function buildApp({ logger, config }) {
@@ -34,15 +34,17 @@ export async function buildApp({ logger, config }) {
   const isPublic = (req) => PUBLIC_ROUTES.has(`${req.method} ${req.url.split("?")[0]}`);
   // Browsing the catalog needs no login. It keeps the normal rate-limit bucket, not the strict auth one.
   const isQueue = (req) => req.url.startsWith("/api/queue/");
-  const isPublicRead = (req) => req.method === "GET" && (req.url.startsWith("/api/catalog/") || req.url.startsWith("/api/inventory/"));
+  // The help chat is the one public POST (people ask before they sign in). It has its own, tight bucket: each answer can cost a model call.
+  const isChat = (req) => req.method === "POST" && req.url.split("?")[0] === "/api/chat/messages";
+  const isPublicRead = (req) => (req.method === "GET" && (req.url.startsWith("/api/catalog/") || req.url.startsWith("/api/inventory/"))) || isChat(req);
 
   await app.register(cors, { origin: config.corsOrigins, credentials: true });
   // Public auth routes get a much stricter, separate bucket (brute-force protection).
   await app.register(rateLimit, {
     // Waiting-room polling (a request every few seconds per person) gets its own bucket so a crowd behind one network
     // address doesn't use up everyone else's allowance, or get "Reconnecting…" for nothing.
-    max: (req) => (isPublic(req) ? (config.authRateLimitMax ?? 10) : isQueue(req) ? (config.queueRateLimitMax ?? 1200) : (config.rateLimitMax ?? 300)),
-    keyGenerator: (req) => `${req.ip}:${isPublic(req) ? "auth" : isQueue(req) ? "queue" : "api"}`,
+    max: (req) => (isPublic(req) ? (config.authRateLimitMax ?? 10) : isQueue(req) ? (config.queueRateLimitMax ?? 1200) : isChat(req) ? (config.chatRateLimitMax ?? 20) : (config.rateLimitMax ?? 300)),
+    keyGenerator: (req) => `${req.ip}:${isPublic(req) ? "auth" : isQueue(req) ? "queue" : isChat(req) ? "chat" : "api"}`,
     timeWindow: "1 minute",
     // Shared across gateway instances and restarts. Fails open if Redis is down (availability over throttling).
     ...(config.redis ? { redis: config.redis, nameSpace: "rl:", skipOnError: true } : {}),
