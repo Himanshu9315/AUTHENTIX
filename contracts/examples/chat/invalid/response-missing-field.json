@@ -1,0 +1,11 @@
+{
+  "answer": "x",
+  "sources": [],
+  "flags": {
+    "grounded": true,
+    "refused": null,
+    "degraded": null,
+    "liveDataRedirect": false
+  },
+  "requestId": "0123456789abcdef"
+}

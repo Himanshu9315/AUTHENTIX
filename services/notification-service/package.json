@@ -1,0 +1,21 @@
+{
+  "name": "@authentix/notification-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js && node --check src/clients.js && node --check src/deliver.js && node --check src/templates.js && node --check src/sinks.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@authentix/events": "workspace:*",
+    "@authentix/internal": "workspace:*",
+    "@authentix/logger": "workspace:*",
+    "@authentix/schemas": "workspace:*",
+    "fastify": "^5.0.0",
+    "nodemailer": "^6.9.16",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  }
+}

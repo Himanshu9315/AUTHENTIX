@@ -1,0 +1,19 @@
+{
+  "answer": "Each ticket can be transferred twice.",
+  "sources": [
+    {
+      "id": "faq:transfers#rules",
+      "kind": "faq",
+      "title": "Transfers",
+      "path": "/help/transfers"
+    }
+  ],
+  "liveData": null,
+  "flags": {
+    "grounded": true,
+    "refused": null,
+    "degraded": "no_api_key",
+    "liveDataRedirect": false
+  },
+  "requestId": "0123456789abcdef"
+}

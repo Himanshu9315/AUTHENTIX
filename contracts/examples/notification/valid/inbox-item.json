@@ -1,0 +1,9 @@
+{
+  "id": "3f2b8c1e-0000-4000-8000-000000000002",
+  "kind": "order",
+  "title": "Booking confirmed",
+  "body": "Blue Lotus Orchestra: your tickets are confirmed.",
+  "link": "/tickets",
+  "createdAt": "2026-10-31T10:00:00.000Z",
+  "readAt": null
+}

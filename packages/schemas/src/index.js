@@ -116,3 +116,10 @@ export const scanRequestSchema = z.object({
 });
 
 export const transferRequestSchema = z.object({ recipientEmail: emailSchema });
+
+// Events from auth-service and aadhaar-service that notification-service consumes. Mirrors contracts/user.*.schema.json.
+export const userEmailVerificationRequestedSchema = z
+  .object({ userId: z.string().uuid(), email: emailSchema, name: z.string().min(1).max(100), token: z.string().min(20).max(200) })
+  .strict();
+export const userEmailVerifiedSchema = z.object({ userId: z.string().uuid() }).strict();
+export const userVerifiedSchema = z.object({ userId: z.string().uuid(), verifiedAt: z.string().datetime() }).strict();

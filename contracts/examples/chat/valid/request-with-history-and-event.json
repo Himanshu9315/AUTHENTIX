@@ -1,0 +1,16 @@
+{
+  "message": "Can I give my ticket to a friend?",
+  "history": [
+    {
+      "role": "user",
+      "text": "Hi"
+    },
+    {
+      "role": "model",
+      "text": "Hello! Ask me anything about booking."
+    }
+  ],
+  "context": {
+    "eventSlug": "neon-monsoon-live-gurugram"
+  }
+}

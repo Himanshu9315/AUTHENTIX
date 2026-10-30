@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "3f2b8c1e-0000-4000-8000-000000000002",
+      "kind": "account",
+      "title": "Email confirmed",
+      "body": "Next, verify your identity so you can book.",
+      "link": "/verify",
+      "createdAt": "2026-10-31T10:00:00.000Z",
+      "readAt": "2026-10-31T10:05:00.000Z"
+    }
+  ],
+  "nextBefore": "2026-10-31T10:00:00.000000Z~3f2b8c1e-0000-4000-8000-000000000002"
+}

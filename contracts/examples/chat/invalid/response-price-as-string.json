@@ -1,0 +1,29 @@
+{
+  "answer": "x",
+  "sources": [],
+  "liveData": {
+    "event": {
+      "slug": "a",
+      "title": "t",
+      "startsAt": "2026-11-11T13:30:00.000Z",
+      "endsAt": "2026-11-11T17:30:00.000Z",
+      "venueName": "v",
+      "city": "c"
+    },
+    "tiers": [
+      {
+        "name": "General",
+        "priceInr": "1499",
+        "available": 1
+      }
+    ],
+    "fetchedAt": "2026-10-31T10:00:00.000Z"
+  },
+  "flags": {
+    "grounded": true,
+    "refused": null,
+    "degraded": null,
+    "liveDataRedirect": false
+  },
+  "requestId": "0123456789abcdef"
+}

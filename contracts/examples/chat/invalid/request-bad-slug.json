@@ -1,0 +1,6 @@
+{
+  "message": "hi",
+  "context": {
+    "eventSlug": "../../etc/passwd"
+  }
+}

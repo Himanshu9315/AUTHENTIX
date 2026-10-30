@@ -1,0 +1,12 @@
+{
+  "answer": "Please don't share Aadhaar numbers, OTPs, card details, emails or phone numbers here.",
+  "sources": [],
+  "liveData": null,
+  "flags": {
+    "grounded": false,
+    "refused": "personal_data",
+    "degraded": null,
+    "liveDataRedirect": false
+  },
+  "requestId": "fedcba9876543210"
+}

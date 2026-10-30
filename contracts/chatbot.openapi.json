@@ -1,0 +1,292 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Authentix chatbot-service",
+    "version": "1.0.0",
+    "description": "Help chat. Anonymous: no user ids, tokens or personal data cross this API. Business outcomes (refusals, degraded answers) are HTTP 200 with flags."
+  },
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ],
+  "paths": {
+    "/chat/messages": {
+      "post": {
+        "summary": "Ask the help assistant",
+        "operationId": "postChatMessage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An answer, a refusal, or a degraded answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "413": {
+            "description": "Body too large"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            }
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "eventSlug": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,98}$"
+              }
+            }
+          }
+        }
+      },
+      "Turn": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "text"
+        ],
+        "properties": {
+          "role": {
+            "enum": [
+              "user",
+              "model"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "Source": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "path"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "enum": [
+              "faq",
+              "event"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "App-relative link, for example /help/transfers or /events/some-slug"
+          }
+        }
+      },
+      "LiveTier": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "priceInr",
+          "available"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "priceInr": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "available": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "LiveData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "tiers",
+          "fetchedAt"
+        ],
+        "properties": {
+          "event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "slug",
+              "title",
+              "startsAt",
+              "endsAt",
+              "venueName",
+              "city"
+            ],
+            "properties": {
+              "slug": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,98}$"
+              },
+              "title": {
+                "type": "string"
+              },
+              "startsAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endsAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "venueName": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              }
+            }
+          },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveTier"
+            }
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Flags": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grounded",
+          "refused",
+          "degraded",
+          "liveDataRedirect"
+        ],
+        "properties": {
+          "grounded": {
+            "type": "boolean"
+          },
+          "refused": {
+            "enum": [
+              null,
+              "personal_data",
+              "out_of_scope"
+            ]
+          },
+          "degraded": {
+            "enum": [
+              null,
+              "no_api_key",
+              "rate_limited",
+              "unavailable",
+              "blocked",
+              "budget"
+            ]
+          },
+          "liveDataRedirect": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "answer",
+          "sources",
+          "liveData",
+          "flags",
+          "requestId"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            }
+          },
+          "liveData": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LiveData"
+              }
+            ]
+          },
+          "flags": {
+            "$ref": "#/components/schemas/Flags"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

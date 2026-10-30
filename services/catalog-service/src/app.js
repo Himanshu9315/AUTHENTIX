@@ -149,14 +149,21 @@ export async function buildApp({ pool, logger, internalToken }) {
   // Booking reads price and cap from here, never from the client. Internal only (not routed by the gateway).
   app.get("/internal/events/:id", { preHandler: requireInternalToken(internalToken) }, async (req, reply) => {
     if (!UUID.test(req.params.id)) return reply.code(404).send({ error: "not_found" });
-    const { rows } = await pool.query("SELECT id, status, starts_at, ticket_cap, hot_sale FROM events WHERE id = $1", [req.params.id]);
+    const { rows } = await pool.query(
+      "SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.ends_at, e.ticket_cap, e.hot_sale, v.name AS venue_name, v.city FROM events e JOIN venues v ON v.id = e.venue_id WHERE e.id = $1",
+      [req.params.id],
+    );
     if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
     const tiers = await pool.query("SELECT id, price_inr FROM ticket_tiers WHERE event_id = $1", [req.params.id]);
     const e = rows[0];
     return {
       id: e.id,
+      slug: e.slug,
+      title: e.title,
       status: e.status,
       startsAt: e.starts_at,
+      endsAt: e.ends_at,
+      venue: { name: e.venue_name, city: e.city },
       ticketCap: e.ticket_cap,
       hotSale: e.hot_sale,
       tiers: tiers.rows.map((t) => ({ id: t.id, priceInr: t.price_inr })),

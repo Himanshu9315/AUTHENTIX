@@ -245,6 +245,44 @@ services:
       aadhaar-service: { condition: service_healthy }
       catalog-service: { condition: service_healthy }
 
+  mailpit:
+    # Dev email inbox (the maintained successor to MailHog, same ports). Nothing is ever delivered to a real address.
+    # Read the mail at http://localhost:8025
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  notification-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: notification-service }
+    environment:
+      PORT: 3012
+      DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/notification
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-authentix}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      SMTP_URL: smtp://mailpit:1025
+      MAIL_FROM: "Authentix <no-reply@authentix.test>"
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:8080}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3012/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+
   auth-service:
     build:
       context: ..
@@ -284,10 +322,14 @@ services:
       TICKET_SERVICE_URL: http://ticket-service:3007
       GATE_SERVICE_URL: http://gate-service:3008
       QUEUE_SERVICE_URL: http://queue-service:3009
+      NOTIFICATION_SERVICE_URL: http://notification-service:3012
+      # nginx (the web containers) is the gateway's only client and sets the real visitor address, so trust it:
+      # otherwise every browser shares one rate-limit bucket. The gateway's own port is bound to localhost below.
+      TRUST_PROXY: "true"
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:5173
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000" # direct access from this machine only; with TRUST_PROXY on, an outside caller could fake its address
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
       interval: 5s
@@ -302,6 +344,7 @@ services:
       ticket-service: { condition: service_healthy }
       gate-service: { condition: service_healthy }
       queue-service: { condition: service_healthy }
+      notification-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   web:

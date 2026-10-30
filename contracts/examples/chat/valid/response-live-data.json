@@ -1,0 +1,34 @@
+{
+  "answer": "Here's the live information for Neon Monsoon Live.",
+  "sources": [],
+  "liveData": {
+    "event": {
+      "slug": "neon-monsoon-live-gurugram",
+      "title": "Neon Monsoon Live",
+      "startsAt": "2026-11-11T13:30:00.000Z",
+      "endsAt": "2026-11-11T17:30:00.000Z",
+      "venueName": "Lotus Arena",
+      "city": "Delhi NCR"
+    },
+    "tiers": [
+      {
+        "name": "General",
+        "priceInr": 1499,
+        "available": 120
+      },
+      {
+        "name": "Premium",
+        "priceInr": 2999,
+        "available": null
+      }
+    ],
+    "fetchedAt": "2026-10-31T10:00:00.000Z"
+  },
+  "flags": {
+    "grounded": true,
+    "refused": null,
+    "degraded": null,
+    "liveDataRedirect": false
+  },
+  "requestId": "0123456789abcdef"
+}

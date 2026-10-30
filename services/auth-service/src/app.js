@@ -264,6 +264,19 @@ export async function buildApp({ pool, logger, relay, config }) {
     return { name: rows[0].name, emailVerified: rows[0].email_verified };
   });
 
+  // notification-service needs somewhere to send things. Kept apart from /internal/users/:id so booking and ticket-service
+  // never start receiving email addresses they don't need. Internal only.
+  app.get("/internal/users/:id/contact", { preHandler: requireInternalToken(config.internalToken) }, async (req, reply) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) return reply.code(404).send({ error: "not_found" });
+    const { rows } = await pool.query("SELECT email, name, email_verified FROM users WHERE id = $1", [req.params.id]);
+    if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
+    const parts = rows[0].name.trim().split(/\s+/).filter(Boolean);
+    const firstName = parts[0] ?? "there";
+    // "Asha K." for places that name the other party in a transfer
+    const displayName = parts.length > 1 ? `${firstName} ${parts.at(-1)[0].toUpperCase()}.` : firstName;
+    return { email: rows[0].email, firstName, displayName, emailVerified: rows[0].email_verified };
+  });
+
   // Ticket transfers look up a recipient by email. Internal only; the public API never reveals who an email belongs to.
   app.post("/internal/users/lookup", { preHandler: requireInternalToken(config.internalToken) }, async (req, reply) => {
     const email = emailSchema.safeParse(req.body?.email);
