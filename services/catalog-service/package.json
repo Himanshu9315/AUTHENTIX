@@ -9,6 +9,7 @@
     "seed": "node seed/seed.js"
   },
   "dependencies": {
+    "@authentix/internal": "workspace:*",
     "@authentix/logger": "workspace:*",
     "@authentix/schemas": "workspace:*",
     "fastify": "^5.0.0",

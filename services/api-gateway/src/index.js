@@ -22,6 +22,9 @@ const app = await buildApp({
       auth: env.AUTH_SERVICE_URL ?? "http://localhost:3001",
       aadhaar: env.AADHAAR_SERVICE_URL ?? "http://localhost:3002",
       catalog: env.CATALOG_SERVICE_URL ?? "http://localhost:3003",
+      // Only routed once the service is deployed (compose sets these), so /readyz never waits on a missing service.
+      ...(env.INVENTORY_SERVICE_URL ? { inventory: env.INVENTORY_SERVICE_URL } : {}),
+      ...(env.BOOKING_SERVICE_URL ? { booking: env.BOOKING_SERVICE_URL } : {}),
     },
     redis,
     trustProxy: env.TRUST_PROXY === "true",

@@ -9,6 +9,9 @@ if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || env.JWT_SECRET.startsWith("
   throw new Error("JWT_SECRET must be set to a random value (32+ chars, not the .env.example placeholder)");
 }
 if (!env.DATABASE_URL) throw new Error("DATABASE_URL must be set");
+if (!env.INTERNAL_TOKEN || env.INTERNAL_TOKEN.length < 32 || env.INTERNAL_TOKEN.startsWith("change-me")) {
+  throw new Error("INTERNAL_TOKEN must be set to a random value (32+ chars, not the .env.example placeholder)");
+}
 
 const pool = await createPool(env.DATABASE_URL);
 const relay = env.RABBITMQ_URL ? startOutboxRelay({ pool, url: env.RABBITMQ_URL, logger }) : undefined;
@@ -18,6 +21,7 @@ const app = await buildApp({
   relay,
   config: {
     jwtSecret: env.JWT_SECRET,
+    internalToken: env.INTERNAL_TOKEN,
     accessTtl: Number(env.ACCESS_TOKEN_TTL_SECONDS ?? 900),
     refreshTtlDays: Number(env.REFRESH_TOKEN_TTL_DAYS ?? 7),
     exposeVerificationToken: env.DEV_EXPOSE_VERIFICATION_TOKEN === "true", // dev only, until notification-service sends the email

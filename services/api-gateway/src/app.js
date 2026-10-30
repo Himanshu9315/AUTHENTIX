@@ -26,7 +26,7 @@ export async function buildApp({ logger, config }) {
 
   const isPublic = (req) => PUBLIC_ROUTES.has(`${req.method} ${req.url.split("?")[0]}`);
   // Browsing the catalog needs no login. It keeps the normal rate-limit bucket, not the strict auth one.
-  const isPublicRead = (req) => req.method === "GET" && req.url.startsWith("/api/catalog/");
+  const isPublicRead = (req) => req.method === "GET" && (req.url.startsWith("/api/catalog/") || req.url.startsWith("/api/inventory/"));
 
   await app.register(cors, { origin: config.corsOrigins, credentials: true });
   // Public auth routes get a much stricter, separate bucket (brute-force protection).
@@ -59,10 +59,27 @@ export async function buildApp({ logger, config }) {
     if (!Object.hasOwn(config.routes, service)) return reply.code(404).send({ error: "not_found" });
     const upstream = config.routes[service];
 
+    // /internal/* is for service-to-service calls only. The URL is forwarded verbatim, so refuse any
+    // path that mentions it (even encoded) or tries to climb out of the service prefix.
+    // Decode until stable so double-encoded tricks (%252e) are caught too.
+    let decoded = req.url.split("?")[0];
+    try {
+      for (let i = 0; i < 5; i++) {
+        const next = decodeURIComponent(decoded);
+        if (next === decoded) break;
+        decoded = next;
+      }
+    } catch {
+      return reply.code(400).send({ error: "bad_request" });
+    }
+    decoded = decoded.toLowerCase();
+    if (decoded.includes("/internal") || decoded.includes("..") || decoded.includes("\\") || decoded.includes("%")) return reply.code(404).send({ error: "not_found" });
+
     // Drop anything the client claims about identity; set it only from a verified token.
     const headers = { ...req.headers };
     delete headers["x-user-id"];
     delete headers["x-user-role"];
+    delete headers["x-internal-token"];
     headers[REQUEST_ID_HEADER] = req.id;
 
     if (!isPublic(req) && !isPublicRead(req)) {

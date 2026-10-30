@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@authentix/events": "workspace:*",
+    "@authentix/internal": "workspace:*",
     "@authentix/logger": "workspace:*",
     "@authentix/schemas": "workspace:*",
     "fastify": "^5.0.0",

@@ -3,7 +3,8 @@ import Fastify from "fastify";
 import { aadhaarOtpRequestSchema, aadhaarVerifySchema } from "@authentix/schemas";
 import { writeOutbox } from "@authentix/events";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
-import { hashAadhaar, last4 } from "./hash.js";
+import { requireInternalToken } from "@authentix/internal";
+import { hashAadhaar, holderKey, last4 } from "./hash.js";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -13,7 +14,7 @@ const MAX_FAILED_OTPS = 5;
 const LOCK_MINUTES = 15;
 
 /**
- * @param {{ pool: import("pg").Pool, logger: any, relay?: { isHealthy: () => boolean }, uidai: ReturnType<import("./uidai-client.js").createUidaiClient>, config: { hashSecret: string } }} deps
+ * @param {{ pool: import("pg").Pool, logger: any, relay?: { isHealthy: () => boolean }, uidai: ReturnType<import("./uidai-client.js").createUidaiClient>, config: { hashSecret: string, internalToken?: string } }} deps
  */
 export async function buildApp({ pool, logger, relay, uidai, config }) {
   const app = Fastify({
@@ -190,6 +191,16 @@ export async function buildApp({ pool, logger, relay, uidai, config }) {
     if (rows.length === 0) return { verified: false };
     return { verified: true, last4: rows[0].last4, verifiedAt: rows[0].verified_at };
   });
+
+  // Booking asks whether a user is Aadhaar-verified and for their cap key. Internal only.
+  if (config.internalToken) {
+    app.get("/internal/holders/:userId", { preHandler: requireInternalToken(config.internalToken) }, async (req, reply) => {
+      if (!UUID.test(req.params.userId)) return reply.code(404).send({ error: "not_found" });
+      const { rows } = await pool.query("SELECT aadhaar_hash FROM aadhaar_verifications WHERE user_id = $1", [req.params.userId]);
+      if (rows.length === 0) return { verified: false };
+      return { verified: true, holderKey: holderKey(config.hashSecret, rows[0].aadhaar_hash) };
+    });
+  }
 
   return app;
 }

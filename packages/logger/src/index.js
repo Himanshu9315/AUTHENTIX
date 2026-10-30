@@ -13,6 +13,17 @@ const REDACT = [
   "*.accessToken",
   "*.refreshToken",
   "*.card",
+  "cvc",
+  "upi",
+  "holderKey",
+  "otp",
+  "aadhaar",
+  "uid",
+  "*.cvc",
+  "*.upi",
+  "*.holderKey",
+  "req.headers['x-internal-token']",
+  "req.headers['x-signature']",
 ];
 
 /**

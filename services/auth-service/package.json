@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@authentix/events": "workspace:*",
+    "@authentix/internal": "workspace:*",
     "@authentix/logger": "workspace:*",
     "@authentix/schemas": "workspace:*",
     "argon2": "^0.41.0",

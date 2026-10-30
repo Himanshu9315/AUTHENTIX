@@ -19,6 +19,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379" # dev only: lets the integration tests reach Redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -64,6 +66,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-authentix}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       UIDAI_URL: http://mock-uidai:3010
       AADHAAR_HASH_SECRET: ${AADHAAR_HASH_SECRET:?set in .env}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/healthz"]
       interval: 5s
@@ -82,6 +85,7 @@ services:
     environment:
       PORT: 3003
       DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/catalog
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/healthz"]
       interval: 5s
@@ -99,6 +103,7 @@ services:
       PORT: 3001
       DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/auth
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-authentix}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-900}
       REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}

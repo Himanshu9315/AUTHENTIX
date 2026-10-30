@@ -11,3 +11,11 @@ export const hashAadhaar = (secret, aadhaar) => createHmac("sha256", secret).upd
 
 /** @param {string} aadhaar 12 digits */
 export const last4 = (aadhaar) => aadhaar.slice(-4);
+
+/**
+ * Per-Aadhaar key handed to booking for the per-event ticket cap. Derived from the stored hash with a
+ * different label, so the uniqueness hash itself never leaves this service.
+ * @param {string} secret
+ * @param {string} aadhaarHash
+ */
+export const holderKey = (secret, aadhaarHash) => createHmac("sha256", secret).update(`holder:v1:${aadhaarHash}`).digest("hex");

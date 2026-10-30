@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import { loginSchema, refreshSchema, registerSchema, verifyEmailSchema } from "@authentix/schemas";
 import { writeOutbox } from "@authentix/events";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
+import { requireInternalToken } from "@authentix/internal";
 
 const ISSUER = "authentix";
 const AUDIENCE = "authentix-api";
@@ -13,7 +14,7 @@ const REQUEST_ID = /^[a-f0-9]{16}$/;
 const sha256 = (s) => createHash("sha256").update(s).digest("hex");
 
 /**
- * @param {{ pool: import("pg").Pool, logger: any, relay?: { isHealthy: () => boolean }, config: { jwtSecret: string, accessTtl: number, refreshTtlDays: number, exposeVerificationToken?: boolean } }} deps
+ * @param {{ pool: import("pg").Pool, logger: any, relay?: { isHealthy: () => boolean }, config: { jwtSecret: string, accessTtl: number, refreshTtlDays: number, exposeVerificationToken?: boolean, internalToken: string } }} deps
  */
 export async function buildApp({ pool, logger, relay, config }) {
   const app = Fastify({
@@ -253,6 +254,14 @@ export async function buildApp({ pool, logger, relay, config }) {
     );
     if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
     return rows[0];
+  });
+
+  // Booking checks eligibility here. Internal only.
+  app.get("/internal/users/:id", { preHandler: requireInternalToken(config.internalToken) }, async (req, reply) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) return reply.code(404).send({ error: "not_found" });
+    const { rows } = await pool.query("SELECT name, email_verified FROM users WHERE id = $1", [req.params.id]);
+    if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
+    return { name: rows[0].name, emailVerified: rows[0].email_verified };
   });
 
   return app;

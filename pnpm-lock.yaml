@@ -200,6 +200,8 @@ importers:
         specifier: ^0.10.0
         version: 0.10.9
 
+  packages/internal: {}
+
   packages/logger:
     dependencies:
       pino:
@@ -217,6 +219,9 @@ importers:
       '@authentix/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@authentix/internal':
+        specifier: workspace:*
+        version: link:../../packages/internal
       '@authentix/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -262,6 +267,9 @@ importers:
       '@authentix/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@authentix/internal':
+        specifier: workspace:*
+        version: link:../../packages/internal
       '@authentix/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -283,6 +291,9 @@ importers:
 
   services/catalog-service:
     dependencies:
+      '@authentix/internal':
+        specifier: workspace:*
+        version: link:../../packages/internal
       '@authentix/logger':
         specifier: workspace:*
         version: link:../../packages/logger

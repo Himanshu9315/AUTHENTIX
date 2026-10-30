@@ -2,8 +2,10 @@ import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import { eventsQuerySchema } from "@authentix/schemas";
 import { REQUEST_ID_HEADER } from "@authentix/logger";
+import { requireInternalToken } from "@authentix/internal";
 
 const REQUEST_ID = /^[a-f0-9]{16}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,98}$/;
 
 const EVENT_COLUMNS = `e.id, e.slug, e.title, e.category, e.poster_url, e.starts_at, e.ends_at, e.hot_sale, e.verified_entry,
@@ -29,9 +31,9 @@ const escapeLike = (s) => s.replace(/[\\%_]/g, "\\$&");
 
 /**
  * Public read API. Organiser writes arrive with the admin dashboard in Phase 8.
- * @param {{ pool: import("pg").Pool, logger: any }} deps
+ * @param {{ pool: import("pg").Pool, logger: any, internalToken: string }} deps
  */
-export async function buildApp({ pool, logger }) {
+export async function buildApp({ pool, logger, internalToken }) {
   const app = Fastify({
     loggerInstance: logger,
     genReqId: (req) => {
@@ -42,7 +44,7 @@ export async function buildApp({ pool, logger }) {
   });
 
   app.addHook("onSend", async (req, reply) => {
-    if (req.method === "GET" && reply.statusCode === 200 && !req.url.startsWith("/healthz") && !req.url.startsWith("/readyz")) {
+    if (req.method === "GET" && reply.statusCode === 200 && !req.url.startsWith("/internal") && !req.url.startsWith("/healthz") && !req.url.startsWith("/readyz")) {
       reply.header("cache-control", "public, max-age=30");
     }
   });
@@ -142,6 +144,23 @@ export async function buildApp({ pool, logger }) {
        GROUP BY v.city ORDER BY v.city`,
     );
     return { items: rows.map((c) => ({ city: c.city, lat: c.lat, lng: c.lng, events: c.events })) };
+  });
+
+  // Booking reads price and cap from here, never from the client. Internal only (not routed by the gateway).
+  app.get("/internal/events/:id", { preHandler: requireInternalToken(internalToken) }, async (req, reply) => {
+    if (!UUID.test(req.params.id)) return reply.code(404).send({ error: "not_found" });
+    const { rows } = await pool.query("SELECT id, status, starts_at, ticket_cap, hot_sale FROM events WHERE id = $1", [req.params.id]);
+    if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
+    const tiers = await pool.query("SELECT id, price_inr FROM ticket_tiers WHERE event_id = $1", [req.params.id]);
+    const e = rows[0];
+    return {
+      id: e.id,
+      status: e.status,
+      startsAt: e.starts_at,
+      ticketCap: e.ticket_cap,
+      hotSale: e.hot_sale,
+      tiers: tiers.rows.map((t) => ({ id: t.id, priceInr: t.price_inr })),
+    };
   });
 
   return app;
