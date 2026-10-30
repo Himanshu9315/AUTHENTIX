@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import LocationSelector from "./LocationSelector.jsx";
 import ThemeToggle from "./ThemeToggle.jsx";
+import { useAuth } from "../lib/auth.jsx";
 import { SearchIcon, ShieldCheck } from "./Icons.jsx";
 
 const TABS = [
@@ -13,6 +14,7 @@ const TABS = [
 
 export default function TopBar() {
   const navigate = useNavigate();
+  const { user, signedIn, logout } = useAuth();
   const loc = useLocation();
   const [params] = useSearchParams();
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -37,7 +39,17 @@ export default function TopBar() {
           <label htmlFor="site-search" className="sr-only">Search for events, artists and venues</label>
           <input id="site-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search for events, artists and venues" className="h-11 w-full min-w-0 bg-transparent text-body2 text-ink placeholder:text-ink-tertiary focus:outline-none" />
         </form>
-        <div className="ml-auto md:ml-0"><ThemeToggle /></div>
+        <div className="ml-auto flex items-center gap-1 md:ml-0">
+          {signedIn ? (
+            <>
+              <Link to="/verify" className="hidden rounded-full px-3 py-2 text-label1 text-ink hover:bg-bg-secondary sm:block">{user?.name?.split(" ")[0] ?? "Account"}</Link>
+              <button type="button" onClick={logout} className="rounded-full px-3 py-2 text-label1 text-ink-secondary hover:bg-bg-secondary">Sign out</button>
+            </>
+          ) : (
+            <Link to="/login" className="rounded-full px-3 py-2 text-label1 text-ink hover:bg-bg-secondary">Sign in</Link>
+          )}
+          <ThemeToggle />
+        </div>
       </div>
       <nav aria-label="Categories" className="mx-auto max-w-7xl px-4">
         <ul className="no-scrollbar flex gap-6 overflow-x-auto">

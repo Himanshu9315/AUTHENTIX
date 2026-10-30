@@ -7,6 +7,9 @@ COPY packages ./packages
 COPY services ./services
 COPY apps ./apps
 RUN pnpm install --frozen-lockfile
+# Demo hints (test cards, the fixed OTP) are on for this university demo. Set to false for anything public.
+ARG VITE_DEMO_HINTS=true
+ENV VITE_DEMO_HINTS=$VITE_DEMO_HINTS
 RUN pnpm --filter @authentix/web build
 
 FROM nginx:1.27-alpine

@@ -146,7 +146,7 @@ export async function buildApp({ pool, logger, relay, uidai, config }) {
       if (err?.code === "otp_mismatch") {
         const { locked, attemptsLeft } = await recordFailedOtp(id);
         if (locked) return reply.code(429).send({ error: "locked", retryAfterSeconds: LOCK_MINUTES * 60 });
-        return reply.code(401).send({ error: "otp_invalid", attemptsLeft });
+        return reply.code(422).send({ error: "otp_invalid", attemptsLeft }); // not 401: that means "not signed in" and makes clients retry
       }
       if (err?.status === 410) {
         await pool.query("DELETE FROM otp_sessions WHERE user_id = $1", [id]);
