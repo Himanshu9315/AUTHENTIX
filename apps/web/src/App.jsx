@@ -10,6 +10,7 @@ import Login from "./pages/Login.jsx";
 import Verify from "./pages/Verify.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import MyTickets from "./pages/MyTickets.jsx";
+import WaitingRoom from "./pages/WaitingRoom.jsx";
 import ActiveOrderBanner from "./components/ActiveOrderBanner.jsx";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/verify" element={<Verify />} />
           <Route path="/checkout/:id" element={<Checkout />} />
           <Route path="/tickets" element={<MyTickets />} />
+          <Route path="/queue/:slug" element={<WaitingRoom />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import TicketPicker from "../components/TicketPicker.jsx";
 import { useAuth } from "../lib/auth.jsx";
+import { useAdmission } from "../lib/useAdmission.js";
 import { CalendarIcon, PinIcon, ShieldCheck } from "../components/Icons.jsx";
 import VerifiedBadge from "../components/VerifiedBadge.jsx";
 import { useFetch } from "../lib/useFetch.js";
@@ -18,6 +19,8 @@ function EventDetailInner() {
   const { slug } = useParams();
   const { data: e, loading, error } = useFetch(`/events/${encodeURIComponent(slug)}`);
   const inv = useFetch(e ? `/inventory/events/${e.id}` : null);
+  const admission = useAdmission(e);
+  const needsQueue = !!e?.hotSale && admission.state !== "admitted";
   const { signedIn, call } = useAuth();
   const navigate = useNavigate();
   const here = useLocation();
@@ -60,6 +63,9 @@ function EventDetailInner() {
   const MESSAGES = {
     email_not_verified: "Verify your email before booking.",
     aadhaar_not_verified: "Verify your identity (Aadhaar) before booking. This is what keeps scalpers out.",
+    admission_required: "This is a high-demand event. Join the queue to book.",
+    admission_invalid: "Your place in the queue isn't valid. Join the queue again.",
+    admission_expired: "Your time to book ran out. Join the queue again.",
     seats_unavailable: "Someone just took one of those seats. We've refreshed the map, so please choose again.",
     sold_out: "That ticket type just sold out.",
     event_not_on_sale: "Tickets for this event aren't on sale.",
@@ -76,12 +82,13 @@ function EventDetailInner() {
     if (inFlight.current) return; // a double-click must not send a second request
     setProblem(null);
     if (!signedIn) return navigate(`/login?next=${encodeURIComponent(here.pathname)}`);
+    if (needsQueue) return navigate(`/queue/${slug}`); // high-demand events: wait in line first
     if (units === 0) return tiers.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     inFlight.current = true;
     setBooking(true);
     bookKey.current ??= crypto.randomUUID();
     try {
-      const { status, body } = await call("/booking/orders", { method: "POST", body: { eventId: e.id, items }, headers: { "idempotency-key": bookKey.current } });
+      const { status, body } = await call("/booking/orders", { method: "POST", body: { eventId: e.id, items }, headers: { "idempotency-key": bookKey.current, ...(e.hotSale && admission.token ? { "admission-token": admission.token } : {}) } });
       if (status === 200 || status === 201) {
         bookKey.current = null;
         return navigate(`/checkout/${body.id}`);
@@ -97,6 +104,7 @@ function EventDetailInner() {
       } else {
         setProblem({ text: MESSAGES[body.error] ?? "We couldn't start your booking. Please try again.", verify: ["email_not_verified", "aadhaar_not_verified"].includes(body.error) });
       }
+      if (body.error?.startsWith("admission_")) admission.refresh(); // our place may have expired: find out
       if (body.error === "seats_unavailable" || body.error === "sold_out") {
         setSelection({ seats: [], qty: {} });
         inv.reload();
@@ -153,6 +161,17 @@ function EventDetailInner() {
 
         <section ref={tiers} aria-labelledby="tickets" className="scroll-mt-32">
           <h2 id="tickets" className="text-title1 text-ink">Tickets</h2>
+          {e.hotSale && (
+            <div className="mt-2 rounded-lg bg-brand-surface p-4 text-body2 text-ink" role="status">
+              {admission.state === "admitted" ? (
+                <p><strong>You’re in!</strong> You have {Math.floor(admission.secondsLeft / 60)}:{String(admission.secondsLeft % 60).padStart(2, "0")} to choose and book.</p>
+              ) : admission.state === "waiting" ? (
+                <p>You’re in the queue (place {admission.position}). <Link className="font-medium text-brand underline" to={`/queue/${slug}`}>Go to the waiting room</Link></p>
+              ) : (
+                <p>{admission.expired ? "Your time to book ran out. " : ""}This event is in high demand. You’ll wait in a short, fair online queue before you can book. <Link className="font-medium text-brand underline" to={`/queue/${slug}`}>Join the queue</Link></p>
+              )}
+            </div>
+          )}
           {problem && (
             <p ref={alertRef} tabIndex={-1} role="alert" className="mt-2 rounded-md bg-bg-secondary p-3 text-body2 text-ink focus:outline-none">
               {problem.text} {problem.verify && <Link className="font-medium text-brand underline" to="/verify">Verify now</Link>}
@@ -182,7 +201,7 @@ function EventDetailInner() {
             )}
           </div>
           <button type="button" onClick={book} disabled={booking} className="h-12 rounded-full bg-brand px-8 text-title3 text-brand-on hover:opacity-90 disabled:opacity-60">
-            {booking ? "Reserving…" : units > 0 ? "Book tickets" : "Select tickets"}
+            {booking ? "Reserving…" : needsQueue ? "Join the queue" : units > 0 ? "Book tickets" : "Select tickets"}
           </button>
         </div>
       </div>

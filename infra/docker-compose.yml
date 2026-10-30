@@ -146,6 +146,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-authentix}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?set in .env}
+      ADMISSION_SECRET: ${ADMISSION_SECRET:?set in .env}
       HOLD_TTL_SECONDS: ${HOLD_TTL_SECONDS:-480}
       AUTH_SERVICE_URL: http://auth-service:3001
       AADHAAR_SERVICE_URL: http://aadhaar-service:3002
@@ -215,6 +216,35 @@ services:
       ticket-service: { condition: service_healthy }
       catalog-service: { condition: service_healthy }
 
+  queue-service:
+    # Waiting room for hot-sale events. Redis only: the line is temporary by nature.
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: queue-service }
+    environment:
+      PORT: 3009
+      REDIS_URL: redis://redis:6379
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
+      ADMISSION_SECRET: ${ADMISSION_SECRET:?set in .env}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      AADHAAR_SERVICE_URL: http://aadhaar-service:3002
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      QUEUE_BATCH_SIZE: ${QUEUE_BATCH_SIZE:-10}
+      QUEUE_INTERVAL_SECONDS: ${QUEUE_INTERVAL_SECONDS:-5}
+      ADMISSION_TTL_SECONDS: ${ADMISSION_TTL_SECONDS:-600}
+      QUEUE_IDLE_SECONDS: ${QUEUE_IDLE_SECONDS:-90}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3009/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      redis: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+      aadhaar-service: { condition: service_healthy }
+      catalog-service: { condition: service_healthy }
+
   auth-service:
     build:
       context: ..
@@ -253,6 +283,7 @@ services:
       BOOKING_SERVICE_URL: http://booking-service:3005
       TICKET_SERVICE_URL: http://ticket-service:3007
       GATE_SERVICE_URL: http://gate-service:3008
+      QUEUE_SERVICE_URL: http://queue-service:3009
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:5173
     ports:
@@ -270,6 +301,7 @@ services:
       booking-service: { condition: service_healthy }
       ticket-service: { condition: service_healthy }
       gate-service: { condition: service_healthy }
+      queue-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   web:

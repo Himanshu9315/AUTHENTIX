@@ -16,7 +16,7 @@ export const JWT_ISSUER = "authentix";
 export const JWT_AUDIENCE = "authentix-api";
 
 /**
- * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, transferLimitPerHour?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
+ * @param {{ logger: any, config: { jwtSecret: string, corsOrigins: string[], routes: Record<string,string>, rateLimitMax?: number, authRateLimitMax?: number, transferLimitPerHour?: number, queueRateLimitMax?: number, trustProxy?: boolean, redis?: import("ioredis").Redis } }} deps
  * routes maps a path segment (e.g. "auth") to an upstream base URL.
  */
 export async function buildApp({ logger, config }) {
@@ -27,15 +27,22 @@ export async function buildApp({ logger, config }) {
     trustProxy: config.trustProxy ?? false,
   });
 
+  // The gateway never needs to read a JSON body, so it doesn't parse one: the exact bytes go through to the service, which
+  // validates them. This also means an empty body with a JSON content-type (common on DELETE) is simply an empty request.
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, raw, done) => done(null, raw));
+
   const isPublic = (req) => PUBLIC_ROUTES.has(`${req.method} ${req.url.split("?")[0]}`);
   // Browsing the catalog needs no login. It keeps the normal rate-limit bucket, not the strict auth one.
+  const isQueue = (req) => req.url.startsWith("/api/queue/");
   const isPublicRead = (req) => req.method === "GET" && (req.url.startsWith("/api/catalog/") || req.url.startsWith("/api/inventory/"));
 
   await app.register(cors, { origin: config.corsOrigins, credentials: true });
   // Public auth routes get a much stricter, separate bucket (brute-force protection).
   await app.register(rateLimit, {
-    max: (req) => (isPublic(req) ? (config.authRateLimitMax ?? 10) : (config.rateLimitMax ?? 300)),
-    keyGenerator: (req) => `${req.ip}:${isPublic(req) ? "auth" : "api"}`,
+    // Waiting-room polling (a request every few seconds per person) gets its own bucket so a crowd behind one network
+    // address doesn't use up everyone else's allowance, or get "Reconnecting…" for nothing.
+    max: (req) => (isPublic(req) ? (config.authRateLimitMax ?? 10) : isQueue(req) ? (config.queueRateLimitMax ?? 1200) : (config.rateLimitMax ?? 300)),
+    keyGenerator: (req) => `${req.ip}:${isPublic(req) ? "auth" : isQueue(req) ? "queue" : "api"}`,
     timeWindow: "1 minute",
     // Shared across gateway instances and restarts. Fails open if Redis is down (availability over throttling).
     ...(config.redis ? { redis: config.redis, nameSpace: "rl:", skipOnError: true } : {}),
@@ -118,7 +125,12 @@ export async function buildApp({ logger, config }) {
     }
 
     // /api/auth/login -> {upstream}/auth/login
-    return reply.from(upstream + req.url.replace(/^\/api/, ""), { rewriteRequestHeaders: () => headers });
+    // The raw JSON string goes through untouched. With a contentType, the proxy sends it as-is and sets content-length itself.
+    const body = typeof req.body === "string" && req.body !== "" ? req.body : undefined;
+    return reply.from(upstream + req.url.replace(/^\/api/, ""), {
+      ...(body !== undefined ? { body, contentType: req.headers["content-type"] } : {}),
+      rewriteRequestHeaders: () => headers,
+    });
   };
   app.all("/api/:service/*", proxy);
   app.all("/api/:service", proxy);

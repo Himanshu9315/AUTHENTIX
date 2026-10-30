@@ -27,6 +27,7 @@ const app = await buildApp({
       ...(env.BOOKING_SERVICE_URL ? { booking: env.BOOKING_SERVICE_URL } : {}),
       ...(env.TICKET_SERVICE_URL ? { tickets: env.TICKET_SERVICE_URL } : {}),
       ...(env.GATE_SERVICE_URL ? { gate: env.GATE_SERVICE_URL } : {}),
+      ...(env.QUEUE_SERVICE_URL ? { queue: env.QUEUE_SERVICE_URL } : {}),
     },
     redis,
     trustProxy: env.TRUST_PROXY === "true",

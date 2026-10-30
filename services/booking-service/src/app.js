@@ -95,7 +95,7 @@ export async function buildApp({ pool, saga, capTransfers, logger, relay, config
     const body = orderBody.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "validation_error" });
     try {
-      const { created, order } = await saga.createOrder({ userId: uid, key, body: body.data, requestId: req.id });
+      const { created, order } = await saga.createOrder({ userId: uid, key, body: body.data, requestId: req.id, admissionToken: req.headers["admission-token"] });
       return reply.code(created ? 201 : 200).send(order);
     } catch (err) {
       return fail(reply, err);

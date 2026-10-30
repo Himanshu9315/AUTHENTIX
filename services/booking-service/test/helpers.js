@@ -34,6 +34,7 @@ const future = (ms) => new Date(Date.now() + ms).toISOString();
 export function makeFakes() {
   const f = {
     cap: 4,
+    hotSale: false,
     holderOf: (userId) => `holder-${userId}`, // override to make several accounts share one Aadhaar
     verified: true,
     emailVerified: true,
@@ -47,7 +48,7 @@ export function makeFakes() {
   f.clients = {
     getUser: async () => ({ status: 200, json: { name: "Test Person", emailVerified: f.emailVerified } }),
     getHolder: async (userId) => ({ status: 200, json: f.verified ? { verified: true, holderKey: f.holderOf(userId) } : { verified: false } }),
-    getEvent: async (id) => ({ status: 200, json: { id, status: "published", startsAt: future(86_400_000), ticketCap: f.cap, hotSale: false, tiers: [{ id: TIER_ID, priceInr: 1000 }] } }),
+    getEvent: async (id) => ({ status: 200, json: { id, status: "published", startsAt: future(86_400_000), ticketCap: f.cap, hotSale: f.hotSale, tiers: [{ id: TIER_ID, priceInr: 1000 }] } }),
     describeSeats: async (_e, ids) => ({ status: 200, json: { seats: ids.map((id) => ({ id, tierId: TIER_ID, label: "Stalls D-7" })) } }),
     inventory: {
       hold: async (...a) => (f.calls.hold++, f.holdResult(...a)),

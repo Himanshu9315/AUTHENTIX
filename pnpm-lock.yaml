@@ -434,6 +434,24 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
 
+  services/queue-service:
+    dependencies:
+      '@authentix/internal':
+        specifier: workspace:*
+        version: link:../../packages/internal
+      '@authentix/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      fastify:
+        specifier: ^5.0.0
+        version: 5.12.7
+      ioredis:
+        specifier: ^6.0.0
+        version: 6.0.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+
   services/ticket-service:
     dependencies:
       '@authentix/events':

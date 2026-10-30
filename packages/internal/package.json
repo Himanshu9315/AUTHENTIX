@@ -4,5 +4,8 @@
   "private": true,
   "type": "module",
   "main": "src/index.js",
-  "scripts": { "lint": "node --check src/index.js" }
+  "scripts": {
+    "lint": "node --check src/index.js && node --check src/admission.js",
+    "test": "node --test test/*.test.js"
+  }
 }

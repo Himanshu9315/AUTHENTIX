@@ -12,6 +12,7 @@ const env = process.env;
 const strong = (v) => v && v.length >= 32 && !v.startsWith("change-me");
 if (!strong(env.INTERNAL_TOKEN)) throw new Error("INTERNAL_TOKEN must be set to a random value (32+ chars, not the .env.example placeholder)");
 if (!strong(env.PAYMENT_WEBHOOK_SECRET)) throw new Error("PAYMENT_WEBHOOK_SECRET must be set to a random value (32+ chars, not the .env.example placeholder)");
+if (!strong(env.ADMISSION_SECRET)) throw new Error("ADMISSION_SECRET must be set to a random value (32+ chars, not the .env.example placeholder)");
 if (!env.DATABASE_URL) throw new Error("DATABASE_URL must be set");
 
 const pool = await createPool(env.DATABASE_URL);
@@ -26,7 +27,7 @@ const clients = createClients({
     payment: env.PAYMENT_SERVICE_URL ?? "http://localhost:3006",
   },
 });
-const saga = createSaga({ pool, clients, logger, config: { holdTtlSeconds: Number(env.HOLD_TTL_SECONDS ?? 480), hashSecret: createHmac("sha256", env.PAYMENT_WEBHOOK_SECRET).update("pay-hash:v1").digest("hex") } });
+const saga = createSaga({ pool, clients, logger, config: { holdTtlSeconds: Number(env.HOLD_TTL_SECONDS ?? 480), admissionSecret: env.ADMISSION_SECRET, hashSecret: createHmac("sha256", env.PAYMENT_WEBHOOK_SECRET).update("pay-hash:v1").digest("hex") } });
 const capTransfers = createCapTransfers({ pool, clients, logger });
 const app = await buildApp({ pool, saga, capTransfers, logger, relay, config: { webhookSecret: env.PAYMENT_WEBHOOK_SECRET, internalToken: env.INTERNAL_TOKEN } });
 

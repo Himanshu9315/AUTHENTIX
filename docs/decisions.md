@@ -273,3 +273,45 @@ The `architect` agent wrote `docs/phase5-design.md` (full reasoning and SQL). De
 - **Event picker:** it lists all upcoming events and the server decides whether the gate is open (`event_not_open`). The design suggested filtering the list to the open window, but the window is configurable on the server (D44), so the client can't know it.
 - **Camera needs HTTPS:** `http://localhost:8081` works on a laptop. A phone on the local network would need HTTPS, which I did not set up.
 - **How it was tested:** the real apps were driven in a simulated browser against the live stack, and the decoder was checked against a real QR code at full and 40 percent size. **Not tested:** real cameras, real phones, and visual polish. A harness lesson: the simulated browser must create its fake browser before React loads, or typed input silently does nothing.
+
+## Phase 6: The waiting room
+
+Designed on Sonnet only (no `architect`), as you chose. It reuses patterns from earlier phases: signed short-lived tokens, atomic Redis scripts, internal service checks.
+
+### D46. A first-come-first-served line in Redis, one atomic script per action
+- **Chose:** queue-service keeps each event's line in a Redis sorted set scored by a **join sequence number** (a counter), not by clock time, so two people joining in the same millisecond still get distinct, strictly ordered places. Joining, checking status, leaving and each admission pass are single Lua scripts, so they are atomic even with several instances. The test has 20 people joining at once and gets places 1 to 20 exactly.
+- **Why Redis only:** the line is temporary by nature and needs to be fast. If Redis restarts, everyone simply rejoins. There is no database and no outbox for this service.
+- **One place per person:** the line is keyed by user id, so joining twice keeps your original place. One verified person (D8) is one account, so one place.
+- **Admission rate:** a worker lets in 10 people every 5 seconds per event (configurable). A Redis lock means several instances don't multiply the rate. The estimated wait is the number of batches ahead times the interval, which is the longest it should take, since people ahead who give up only shorten it.
+- **One clock:** every time the queue compares (idle limits, admission expiry, "are they admitted") it uses Redis's own clock, not each service instance's, so instances with slightly different clocks can't disagree. booking-service still checks an admission's expiry against its own clock, which on one machine is the same clock; with servers on different machines you would want them time-synced.
+- **A bug the tests caught:** a batch size of 0 would have admitted the whole line, because the Redis range `0..-1` means "everything". It now admits nobody, and the service refuses to start with a batch size below 1.
+
+### D47. The admission token is signed, short-lived, and checked by booking without calling the queue
+- **Chose:** when someone reaches the front, queue-service signs a token containing their user id, the event id and an expiry (10 minutes). booking-service checks the signature itself with a secret shared only by those two services, so a booking never needs a call to the queue. For events flagged `hot_sale`, booking refuses an order with no token, a forged token, another person's token, another event's token or an expired token (403), and creates nothing.
+- **Deterministic on purpose:** the same user, event and expiry always give the same token, so reloading the page returns the same token and nothing needs to be stored.
+- **The signature is checked first,** then expiry, then who and which event, so a forged token learns nothing.
+- **A repeated order** (same idempotency key) doesn't need the token again, since the order is already theirs.
+- **Fails closed:** if booking has no admission secret configured, hot-sale booking is refused rather than allowed.
+- **Known limits:** a token can be used for more than one order until it expires, but the per-Aadhaar ticket cap still bounds what anyone can take. There is also no limit on how many admitted people book at once, only on how fast people are admitted. An admission can't be revoked early, and leaving the queue does not invalidate a token already issued.
+
+### D48. Who may join, and how often
+- **Chose:** joining checks that the event is published and flagged hot-sale, and that the person has a confirmed email and a verified Aadhaar. All of it fails closed (503 if a service is down). Unverified accounts therefore can't clog the line. Each person may join up to 20 times a minute, which protects the three services the join check calls.
+- **Checking status makes no internal calls:** polling is just Redis, so thousands of waiting people don't load the other services.
+- **Honest limit:** the queue is fair between verified people, but it cannot stop one person with a faster connection or a script from joining first. What it does guarantee is one place per verified person.
+
+### D49. How long you can be away: 90 seconds, not the 30 we first agreed
+- **Chose:** someone who stops checking in for 90 seconds loses their place. You proposed about 30. I made it 90 because browsers slow down timers in background tabs, so a person who switches tabs for a moment would lose their place, and that would feel unfair. The page also checks in immediately when you come back to the tab. It's one setting (`QUEUE_IDLE_SECONDS`).
+
+### D50. The waiting room in the web app
+- **Flow:** on a hot-sale event the main button says "Join the queue", and the page explains the wait. The waiting room shows your place, how many are ahead, the estimated wait and a "Leave the queue" button, and it checks in every 3 to 4 seconds. When admitted it shows a countdown and takes you back to the event page, where booking works and the admission token is sent automatically. A banner counts down the booking time.
+- **Errors are handled:** unverified users are sent to verification, a lost connection shows "Reconnecting… your place is safe for a short while", and an expired place or admission offers to rejoin at the back.
+- **The token lives in memory only,** and the event page can always get it again from the server, so a reload loses nothing.
+- **Your seat choice is not kept** while you wait in line, since you pick tickets after being admitted.
+- **How it was tested:** the live stack was exercised through the gateway, and the real app was driven in the simulated browser (sign up, hot event, join, leave, rejoin, admitted, automatic return to the event, book). **Not tested:** many people in the line at once through the real UI, real browser tab throttling, and visual polish.
+
+### D51. The gateway passes JSON bodies through untouched, and the waiting room polls through its own rate-limit bucket
+- **The bug:** an empty `DELETE` (or `POST`) that carried a JSON content-type header was rejected by the gateway itself with a 400 before reaching the service. My browser app didn't send that combination, but many HTTP clients do, and the symptom was that "Leave the queue" silently did nothing for them.
+- **Fix:** the gateway no longer parses JSON bodies. It never needed to read them, so it forwards the original JSON text and the service validates it. Spacing and non-ASCII characters arrive unchanged (a test checks this). JSON must be UTF-8, so text that isn't valid UTF-8 is not preserved, which is irrelevant for JSON. Re-encoding by the proxy library was the trap on the way: it needs an explicit content-type to send a string as-is.
+- **Waiting-room polling has its own bucket:** a request every few seconds per person would otherwise eat the normal 300-a-minute allowance for everyone behind one network address and cause false "Reconnecting…" states. It now has a separate, larger allowance (1200 a minute per address).
+- **Also fixed after verification:** the waiting room could end up running two polling loops after "Join again", the join rate limiter could in theory leave a counter that never expired (count and expiry are now one step), and the queue used each server's own clock (now Redis's).
+- **Not covered:** an admitted person can book more than once with the same token until it expires, bounded by the Aadhaar ticket cap, and I did not load-test a large crowd.

@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import { writeOutbox } from "@authentix/events";
+import { verifyAdmission } from "@authentix/internal";
 import { orderConfirmedSchema, orderRefundedSchema } from "@authentix/schemas";
 
 // Order state machine (every change is a guarded UPDATE ... WHERE state = expected, so the request
@@ -25,7 +26,7 @@ const sortKeys = (v) =>
 const canonical = (v) => JSON.stringify(sortKeys(v));
 
 /**
- * @param {{ pool: import("pg").Pool, clients: any, logger: any, config?: Partial<{ holdTtlSeconds: number, payHoldSeconds: number, paymentTimeoutSeconds: number, holdMinRemainingSeconds: number, pendingTimeoutSeconds: number, leaseSeconds: number, hashSecret: string }> }} deps
+ * @param {{ pool: import("pg").Pool, clients: any, logger: any, config?: Partial<{ holdTtlSeconds: number, payHoldSeconds: number, paymentTimeoutSeconds: number, holdMinRemainingSeconds: number, pendingTimeoutSeconds: number, leaseSeconds: number, hashSecret: string, admissionSecret: string }> }} deps
  */
 export function createSaga({ pool, clients, logger, config = {} }) {
   const cfg = {
@@ -36,6 +37,7 @@ export function createSaga({ pool, clients, logger, config = {} }) {
     pendingTimeoutSeconds: 30,
     leaseSeconds: 30,
     hashSecret: "dev-only-request-hash-secret",
+    admissionSecret: "",
     ...config,
   };
 
@@ -128,7 +130,7 @@ export function createSaga({ pool, clients, logger, config = {} }) {
     return { created: false, order: await viewById(existing.id) }; // current state, not a byte-identical replay
   }
 
-  async function createOrder({ userId, key, body, requestId }) {
+  async function createOrder({ userId, key, body, requestId, admissionToken }) {
     const requestHash = sha(`POST /booking/orders|${canonical(body)}`);
     const existing = await findByKey(userId, key);
     if (existing) return replay(existing, requestHash);
@@ -147,6 +149,14 @@ export function createSaga({ pool, clients, logger, config = {} }) {
     if (event.status === 404) throw new SagaError(404, { error: "event_not_found" });
     if (event.status !== 200) throw new SagaError(503, { error: "service_unavailable" });
     if (event.json.status !== "published" || new Date(event.json.startsAt) <= new Date()) throw new SagaError(422, { error: "event_not_on_sale" });
+
+    // High-demand events can only be booked by someone the waiting room let in, for this event, and not too long ago.
+    if (event.json.hotSale) {
+      if (!cfg.admissionSecret) throw new SagaError(503, { error: "service_unavailable" }); // can't check, so don't allow
+      if (!admissionToken) throw new SagaError(403, { error: "admission_required" });
+      const a = verifyAdmission(cfg.admissionSecret, admissionToken, { userId, eventId: body.eventId });
+      if (!a.ok) throw new SagaError(403, { error: a.reason === "expired" ? "admission_expired" : "admission_invalid" });
+    }
 
     const price = new Map(event.json.tiers.map((t) => [t.id, t.priceInr]));
     if (body.items.some((i) => !price.has(i.tierId))) throw new SagaError(400, { error: "invalid_items" });
