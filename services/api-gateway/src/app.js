@@ -25,6 +25,8 @@ export async function buildApp({ logger, config }) {
   });
 
   const isPublic = (req) => PUBLIC_ROUTES.has(`${req.method} ${req.url.split("?")[0]}`);
+  // Browsing the catalog needs no login. It keeps the normal rate-limit bucket, not the strict auth one.
+  const isPublicRead = (req) => req.method === "GET" && req.url.startsWith("/api/catalog/");
 
   await app.register(cors, { origin: config.corsOrigins, credentials: true });
   // Public auth routes get a much stricter, separate bucket (brute-force protection).
@@ -63,7 +65,7 @@ export async function buildApp({ logger, config }) {
     delete headers["x-user-role"];
     headers[REQUEST_ID_HEADER] = req.id;
 
-    if (!isPublic(req)) {
+    if (!isPublic(req) && !isPublicRead(req)) {
       const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
       try {
         if (!token) throw new Error("missing token");

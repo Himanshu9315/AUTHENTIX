@@ -74,6 +74,22 @@ services:
       rabbitmq: { condition: service_healthy }
       mock-uidai: { condition: service_healthy }
 
+  catalog-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: catalog-service }
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/catalog
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+
   auth-service:
     build:
       context: ..
@@ -106,6 +122,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set in .env}
       AUTH_SERVICE_URL: http://auth-service:3001
       AADHAAR_SERVICE_URL: http://aadhaar-service:3002
+      CATALOG_SERVICE_URL: http://catalog-service:3003
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:5173
     ports:
@@ -118,6 +135,7 @@ services:
     depends_on:
       auth-service: { condition: service_healthy }
       aadhaar-service: { condition: service_healthy }
+      catalog-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
 volumes:

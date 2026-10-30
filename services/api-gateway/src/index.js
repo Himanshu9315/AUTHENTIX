@@ -21,6 +21,7 @@ const app = await buildApp({
     routes: {
       auth: env.AUTH_SERVICE_URL ?? "http://localhost:3001",
       aadhaar: env.AADHAAR_SERVICE_URL ?? "http://localhost:3002",
+      catalog: env.CATALOG_SERVICE_URL ?? "http://localhost:3003",
     },
     redis,
     trustProxy: env.TRUST_PROXY === "true",
