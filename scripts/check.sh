@@ -18,6 +18,8 @@ run() {
 if [ -f .env ] && (exec 3<>/dev/tcp/127.0.0.1/5432) 2>/dev/null; then
   set -a; . ./.env; set +a
   export TEST_PG_URL="postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@127.0.0.1:5432/postgres"
+  # Logical DB 15 is scratch space: the tests flush it, so the dev data in DB 0 is never touched.
+  if (exec 3<>/dev/tcp/127.0.0.1/6379) 2>/dev/null; then export TEST_REDIS_URL="redis://127.0.0.1:6379/15"; fi
 fi
 
 if [ -f pnpm-workspace.yaml ]; then
