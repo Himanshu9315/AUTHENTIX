@@ -1,0 +1,12 @@
+# Shared build for every Node service. Build context is the repo root.
+FROM node:22-alpine
+RUN npm i -g pnpm@12.16.1
+WORKDIR /repo
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages ./packages
+COPY services ./services
+ARG SERVICE
+RUN pnpm install --frozen-lockfile
+WORKDIR /repo/services/${SERVICE}
+USER node
+CMD ["node", "src/index.js"]

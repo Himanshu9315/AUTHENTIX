@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "user.registered",
+  "description": "Payload of the user.registered event (inside the standard event envelope).",
+  "type": "object",
+  "required": ["userId", "email", "name"],
+  "properties": {
+    "userId": { "type": "string", "format": "uuid" },
+    "email": { "type": "string", "format": "email" },
+    "name": { "type": "string" }
+  },
+  "additionalProperties": false
+}

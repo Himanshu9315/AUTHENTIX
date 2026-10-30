@@ -1,0 +1,4 @@
+# Root entry point so a plain `docker compose up` works. Reads ./.env.
+include:
+  - path: infra/docker-compose.yml
+    env_file: .env

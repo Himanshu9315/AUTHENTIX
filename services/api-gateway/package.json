@@ -1,0 +1,19 @@
+{
+  "name": "@authentix/api-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js && node --check src/app.js"
+  },
+  "dependencies": {
+    "@authentix/logger": "workspace:*",
+    "@authentix/schemas": "workspace:*",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@fastify/reply-from": "^11.0.0",
+    "fastify": "^5.0.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
