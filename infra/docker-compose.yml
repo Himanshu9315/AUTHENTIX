@@ -138,5 +138,14 @@ services:
       catalog-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    ports:
+      - "8080:80"
+    depends_on:
+      api-gateway: { condition: service_healthy }
+
 volumes:
   pgdata:

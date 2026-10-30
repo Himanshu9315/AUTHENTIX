@@ -88,3 +88,46 @@ Read this after the project to see why things are the way they are. Each entry s
 
 ### D16. No `architect` subagent so far
 - Nothing in Phases 1 and 2 needed it. The hash design (D8) was the closest call, and I judged it routine. It will be used for the seat-hold and booking-saga work in Phase 4.
+
+## Phase 3: Catalog and web shell
+
+### D17. Design tokens were read from district.in's CSS, not guessed
+- **Chose:** Claude in Chrome wasn't available, so I downloaded the three stylesheets District serves and read its CSS variables directly: type scale, 4px spacing scale, radii, the grey scale, and the light/dark surface roles. They live in `apps/web/src/design/tokens.js`, and the Tailwind config generates the light and dark CSS variables from that file, so there is one source of truth.
+- **Why:** CLAUDE.md says "do not guess values". Real variable values are more exact than eyeballing a screenshot.
+- **Not copied:** District's purple brand colour, its PassengerSerif font (licensed), and any images, text or code. Authentix has its own teal brand (`#0c7c70`, passes 4.5:1 on white) and uses Be Vietnam Pro (open licence, loaded from Google Fonts).
+- **Deviation:** District's `grey-400` (#77777e) fails WCAG AA as small text on the light secondary background (3.9:1), so light-theme tertiary text uses `#65656c` instead.
+- **Limit:** layout measurements (card width, header height, carousel gap) are my approximations in the District style. I couldn't render their pages to measure them.
+
+### D18. Catalog holds display data only
+- **Chose:** catalog-service has venues, artists, events and ticket tiers (name, description, price). It does not hold stock or seat state.
+- **Why:** inventory-service owns what is sold or held (Phase 4), and a service must not own another's data. The catalog shows tiers; inventory will say how many are left.
+- **Also:** `hot_sale`, `verified_entry` and `ticket_cap` (default 4) are on the event so the queue, the badge and the booking cap have one place to read from.
+
+### D19. Catalog reads are public; organiser writes wait for Phase 8
+- **Chose:** `GET /api/catalog/*` needs no login and keeps the normal rate-limit bucket. The strict bucket is for login and registration only. Anything other than GET on `/api/catalog` still needs a JWT. The gateway still strips client-supplied identity headers.
+- **Why:** browsing must work before sign-up. Create and edit endpoints belong with the admin dashboard, so I didn't build them early. The seed script writes to the database directly.
+
+### D20. Search is plain `ILIKE`, with wildcards escaped
+- **Chose:** one `q` filter matches event title, venue name or artist name. `%` and `_` in user input are escaped, so a search for `%` doesn't match everything.
+- **Gave up:** ranking and typo tolerance. Postgres full-text search or `pg_trgm` is the upgrade if needed. At 18 events it isn't.
+
+### D21. Distance is computed in SQL from the user's coordinates
+- **Chose:** the client sends `lat` and `lng`, and the API returns `distanceKm` using the spherical law of cosines. The coordinates come from the selected city's centre, or from the browser's location if the user opts in.
+- **Why:** the card must show distance. Using the city centre by default avoids asking for location permission on first visit.
+
+### D22. Seed data is fully fictional and generated
+- **Chose:** 18 events, 6 venues and 20 artists, all invented (for example "Captain Chutney"). Posters and avatars are SVGs generated from the title, with no third-party images. Dates are "today plus N days", so the demo never goes stale, and the seed is idempotent (upserts by slug).
+- **Known gap:** re-seeding doesn't delete ticket tiers removed from the seed file.
+
+### D23. Frontend stack and a deliberately simple data layer
+- **Chose:** React + Vite + Tailwind v3, React Router, and a small `useFetch` hook. No state or data-fetching library.
+- **Why:** three read-only pages don't need one. Tailwind v3 was chosen over v4 because v3's `tailwind.config.js` takes the JS token file directly.
+- **Dev vs Docker:** in dev, Vite proxies `/api` to the gateway. In Docker, nginx serves the build on port 8080 and proxies `/api` to the gateway. Both are same-origin, so no CORS setup is needed.
+
+### D24. "Book tickets" is honest about not working yet
+- **Chose:** the sticky button scrolls to the ticket tiers and shows "Checkout isn't available in this build yet." Real checkout arrives in Phase 4.
+- **Placeholders:** footer social, help and legal links point at placeholders until those pages exist.
+
+### D25. How the web app was verified
+- **Chose:** `vite build`, then a one-off server-side render of each route (home, search, event detail, 404) to catch runtime errors (run by hand, not kept in the repo), plus HTTP checks against the running nginx and gateway.
+- **Gap:** I couldn't look at the pages in a browser, so visual polish, spacing and the District feel are unreviewed. Open `http://localhost:8080` and judge them yourself.
