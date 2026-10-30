@@ -92,6 +92,17 @@ export async function buildApp({ pool, redis, logger, config }) {
     }
   };
 
+  // Booking uses this to validate seat ids and show labels ("Stalls D-7") without reading our tables.
+  app.post("/internal/seats/describe", internal, async (req, reply) => {
+    const parsed = z.object({ eventId: uuid, seatIds: z.array(uuid).min(1).max(10) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error" });
+    const { rows } = await pool.query(
+      "SELECT id, tier_id, section, row_label, number FROM seats WHERE event_id = $1 AND id = ANY($2::uuid[])",
+      [parsed.data.eventId, parsed.data.seatIds],
+    );
+    return { seats: rows.map((r) => ({ id: r.id, tierId: r.tier_id, label: `${r.section} ${r.row_label}-${r.number}` })) };
+  });
+
   app.post("/internal/holds", internal, run((a) => store.hold(a)));
   app.post("/internal/holds/:orderId/extend", internal, run((a) => store.hold(a)));
   app.post("/internal/holds/:orderId/release", internal, run((a) => store.release(a)));

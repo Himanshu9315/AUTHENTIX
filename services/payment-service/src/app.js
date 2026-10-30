@@ -99,6 +99,15 @@ export async function buildApp({ pool, logger, config }) {
     return reply.code(200).send(view(existing)); // same request again: return the original, never charge twice
   });
 
+  // Lets booking find a payment whose create reply it never received (the key is derived: pay:{orderId}:{attempt}).
+  app.get("/internal/payments/by-key/:key", internal, async (req, reply) => {
+    const key = keySchema.safeParse(req.params.key);
+    if (!key.success) return reply.code(404).send({ error: "not_found" });
+    const { rows } = await pool.query("SELECT * FROM payments WHERE idempotency_key = $1", [key.data]);
+    if (rows.length === 0) return reply.code(404).send({ error: "not_found" });
+    return view(rows[0]);
+  });
+
   app.get("/internal/payments/:id", internal, async (req, reply) => {
     if (!uuid.safeParse(req.params.id).success) return reply.code(404).send({ error: "not_found" });
     const { rows } = await pool.query("SELECT * FROM payments WHERE id = $1", [req.params.id]);

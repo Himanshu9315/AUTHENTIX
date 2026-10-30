@@ -131,3 +131,68 @@ Read this after the project to see why things are the way they are. Each entry s
 ### D25. How the web app was verified
 - **Chose:** `vite build`, then a one-off server-side render of each route (home, search, event detail, 404) to catch runtime errors (run by hand, not kept in the repo), plus HTTP checks against the running nginx and gateway.
 - **Gap:** I couldn't look at the pages in a browser, so visual polish, spacing and the District feel are unreviewed. Open `http://localhost:8080` and judge them yourself.
+
+## Phase 4: Inventory, booking and payments
+
+The `architect` agent (Opus) wrote the design note `docs/phase4-design.md`, with the full reasoning and SQL. This section records the decisions and what I chose on its open questions.
+
+### D26. Postgres is the only guarantee against double-selling; Redis holds are a convenience
+- **Chose:** a seat sale is a Postgres insert into `seat_sales` with `seat_id` as the primary key, so the database physically refuses a second sale. General-admission stock has `CHECK (sold <= capacity)` plus a guarded `UPDATE`. Holds (the 8-minute "reserved while you pay" state) live in Redis with a TTL.
+- **Why:** if Redis restarts and forgets every hold, the worst outcome is a buyer who paid gets a refund. It can never produce two tickets for one seat. The race test proves this by wiping Redis and letting 50 buyers confirm the same seat: exactly one wins.
+- **Why not `SELECT ... FOR UPDATE SKIP LOCKED` for seats:** that suits "give me any free seat". We sell specific seats, and a primary-key constraint is a simpler and stronger guarantee. `SKIP LOCKED` is used in the booking sweeper instead.
+- **Hold steps:** take the Redis hold first, then check Postgres for sold seats. The reverse order has a window where a seat sells between the check and the hold.
+
+### D27. Inventory stores stock, never prices
+- **Chose:** prices stay in catalog and booking reads them at order time. Inventory learns about events and tiers by calling the public catalog API in its seed.
+- **Why:** one source of truth for price, and no cross-service table reads.
+- **Revisit:** in Phase 8, catalog should emit events when an organiser edits an event, and inventory should consume them.
+
+### D28. The booking saga is a state machine with guarded updates and a sweeper
+- **States:** PENDING, HELD, PAYMENT_PENDING, PAID, CONFIRMED, plus the endings FAILED, CANCELLED, EXPIRED and REFUND_PENDING, REFUNDED.
+- **Chose:** every change is `UPDATE ... WHERE state = expected`. If 0 rows change, someone else already moved the order. This lets the request handler, the payment callback and the sweeper race safely with no locks held across HTTP calls.
+- **Sweeper:** every 5 seconds it leases orders with `FOR UPDATE SKIP LOCKED`, commits, then does the HTTP work. It handles lost callbacks, crashes between steps and expired holds.
+- **Why not distributed transactions:** CLAUDE.md rules them out. Compensation (release the hold, refund) replaces them.
+- **Callbacks only affect the current attempt:** a callback is matched to the payment recorded for the order's latest attempt, so a late or repeated callback from attempt 1 cannot disturb attempt 2.
+- **Retry backoff:** a dependency that is down is retried after 5 s, 15 s, 45 s, 135 s, then every 5 minutes.
+- **Tested paths:** declined payment, hold expiry, payment succeeds but seats are gone (refund), crash while PAID, crash while REFUND_PENDING, a hanging payment, a late success after the order failed, a lost create reply (found by key, and never created), a second charge, duplicate and concurrent callbacks, seats lost while extending the hold, an unsupported instrument, a hold request that never answered, two sweepers at once, and the signed callback route (valid, bad signature, stale timestamp, tampered body, non-ASCII header).
+
+### D29. Money is never silently kept
+- **Chose:** if a payment succeeds after its order already failed, expired or was cancelled, the order moves to REFUND_PENDING and is refunded (reason `late_payment`). If the customer pays but the seats were lost in the meantime, they are refunded too.
+- **Why:** the alternative is a customer charged for nothing. A refund costs nothing in a mock and is the correct real-world behaviour.
+
+### D30. Idempotency uses natural keys, not a generic key table
+- **Chose:** `UNIQUE (user_id, idempotency_key)` on orders and `UNIQUE (order_id, idempotency_key)` on payment attempts. A repeated key with the same body returns the order's current state. A repeated key with a different body gives 422. Booking derives the payment keys itself (`pay:{orderId}:{attempt}`, `refund:{paymentId}`) so a retried call can never charge twice.
+- **Trade-off:** a replay returns the current state, not a byte-identical copy of the first response.
+- **The pay-key hash includes the instrument:** it is a keyed HMAC over the method plus the card's last 4 digits (or the UPI id), so reusing a key with a different card gives 422. It is not reversible without the server secret and the full card number is never part of it.
+- **A bug the tests caught:** two simultaneous pay requests with the same key made the second fail with `invalid_state`. It now returns the current state.
+
+### D31. The per-Aadhaar ticket cap is reserved atomically, with a derived key
+- **Chose:** `cap_usage(event_id, holder_key, qty)` is updated with `INSERT ... ON CONFLICT DO UPDATE ... WHERE qty + new <= cap` in the same transaction as the order insert. The row lock serialises parallel orders by one person. In-flight orders count, and the share is released exactly once (a `cap_held` flag) when an order ends without tickets.
+- **holderKey, not the hash:** aadhaar-service gives booking `HMAC(secret, "holder:v1:" + hash)`. The uniqueness hash never leaves aadhaar-service, so a leaked booking database cannot be joined to the Aadhaar database.
+- **Test:** 10 parallel orders on one Aadhaar with a cap of 4 gives exactly 4.
+
+### D32. Eligibility fails closed
+- **Chose:** booking asks auth-service (email verified) and aadhaar-service (Aadhaar verified) on every new order. If either is down, booking returns 503 rather than guessing.
+- **Why:** the JWT carries only the user id and role, so it can't say whether someone is verified, and anything cached would go stale.
+
+### D33. Internal routes are protected twice
+- **Chose:** `/internal/*` routes need an `x-internal-token` (constant-time compare). The gateway also strips that header from clients and returns 404 for any path containing `/internal` or `..`, decoding repeatedly so `%252e` tricks fail. payment-service is not routed by the gateway at all.
+- **Why two layers:** the gateway forwards the URL as-is, so one missed encoding would otherwise expose an internal route. A verifier review caught the double-encoding gap.
+
+### D34. Payment mock details
+- **Chose:** outcomes come from fictional test instruments (`4242...` succeeds, `...0002` declines, `...9999` hangs, `...0077` succeeds after 20 seconds, UPI `success@`, `fail@`, `timeout@authentix`). Card numbers, CVCs and UPI ids are never stored or logged. Delayed outcomes are stored in the database and applied by a 1-second poller, so a restart loses nothing.
+- **Callbacks:** payment-service writes the callback in the same transaction as the status change and delivers it signed (HMAC over timestamp + raw body) with retries. Booking rejects bad signatures and timestamps more than 5 minutes off.
+- **No re-charge after a lost reply:** booking never keeps card details, so it cannot re-send a create call. Instead the sweeper asks payment-service for the payment by its derived key (`pay:{orderId}:{attempt}`). If it exists, the order adopts it and carries on. If it does not, nothing was charged and the order goes back to HELD.
+- **Stray charges are refunded:** a successful payment that is not the order's current one (a second charge, or an old attempt) is refunded straight away. If that refund call itself fails it is only logged for follow-up. A durable retry table for strays is a known gap.
+
+### D35. Answers to the architect's open questions
+1. **A live hold beats an expired paid order**, and the payer is refunded. Respecting holds keeps the rule simple: whoever currently holds a seat keeps it.
+2. **Hot-sale events are bookable now.** The queue and admission token come in Phase 6, which will add the gate.
+3. **Transfers and the recipient's cap:** not counted yet. Decide in Phase 5 with the transfer rules.
+4. **Price is read live from catalog when the order is created.** Existing orders keep their price.
+5. **Three payment attempts per order** while the hold is valid.
+
+### D36. Test strategy for this phase
+- `services/inventory-service/test/race.test.js`: 50 buyers on one seat (one winner), multi-seat holds are all-or-nothing, Redis wiped with the fence off (Postgres alone allows one sale), idempotent confirm even when a competing hold touched the seat, a failed confirm releases its fence, and GA sells exactly its capacity.
+- `services/booking-service/test/cap.test.js` and `saga.test.js` (5 + 20 tests): the cap race and the failure paths above, against a real Postgres with fake inventory and payment clients. Not covered by automated tests: the real HTTP between services (checked by hand with an end-to-end run through the gateway) and the stray-refund failure case.
+- Tests use scratch databases, and Redis logical DB 15 only, which is flushed. The dev data in DB 0 is never touched.

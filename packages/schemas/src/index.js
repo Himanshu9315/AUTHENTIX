@@ -47,3 +47,35 @@ export const eventsQuerySchema = z
     offset: z.coerce.number().int().min(0).default(0),
   })
   .refine((d) => (d.lat === undefined) === (d.lng === undefined), { message: "lat and lng go together" });
+
+// Events emitted by booking-service. Mirrors contracts/order.*.schema.json.
+export const orderConfirmedSchema = z
+  .object({
+    orderId: z.string().uuid(),
+    userId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    items: z
+      .array(
+        z.object({
+          tierId: z.string().uuid(),
+          seatId: z.string().uuid().nullable(),
+          seatLabel: z.string().nullable(),
+          quantity: z.number().int().min(1),
+          unitPriceInr: z.number().int().min(0),
+        }).strict(),
+      )
+      .min(1),
+    totalInr: z.number().int().min(0),
+    confirmedAt: z.string().datetime(),
+  })
+  .strict();
+
+export const orderRefundedSchema = z
+  .object({
+    orderId: z.string().uuid(),
+    userId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    reason: z.enum(["seats_unavailable", "sold_out", "late_payment"]),
+    refundedAt: z.string().datetime(),
+  })
+  .strict();

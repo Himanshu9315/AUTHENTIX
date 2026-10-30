@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "order.refunded",
+  "description": "Payload of order.refunded: a payment was taken but the order could not be fulfilled, so it was refunded.",
+  "type": "object",
+  "required": ["orderId", "userId", "eventId", "reason", "refundedAt"],
+  "properties": {
+    "orderId": { "type": "string", "format": "uuid" },
+    "userId": { "type": "string", "format": "uuid" },
+    "eventId": { "type": "string", "format": "uuid" },
+    "reason": { "enum": ["seats_unavailable", "sold_out", "late_payment"] },
+    "refundedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
