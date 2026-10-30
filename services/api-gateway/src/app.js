@@ -63,7 +63,8 @@ export async function buildApp({ logger, config }) {
     return reply.code(503).send({ status: "not_ready" });
   });
 
-  app.all("/api/:service/*", async (req, reply) => {
+  // Both shapes: /api/tickets (a list route with no trailing segment) and /api/tickets/anything.
+  const proxy = async (req, reply) => {
     const { service } = req.params;
     if (!Object.hasOwn(config.routes, service)) return reply.code(404).send({ error: "not_found" });
     const upstream = config.routes[service];
@@ -112,13 +113,15 @@ export async function buildApp({ logger, config }) {
       // Transfers are limited per signed-in user, not per IP, so one person can't fan tickets out to many accounts quickly.
       if (req.method === "POST" && TRANSFER_PATH.test(decoded) && transferLimiter) {
         const verdict = await transferLimiter(req);
-        if (!verdict.isAllowed) return reply.code(429).send({ error: "rate_limited" });
+        if (verdict.isExceeded) return reply.code(429).send({ error: "rate_limited" });
       }
     }
 
     // /api/auth/login -> {upstream}/auth/login
     return reply.from(upstream + req.url.replace(/^\/api/, ""), { rewriteRequestHeaders: () => headers });
-  });
+  };
+  app.all("/api/:service/*", proxy);
+  app.all("/api/:service", proxy);
 
   return app;
 }

@@ -177,14 +177,25 @@ export function startConsumer({ url, logger, queue, bindings, handler, prefetch 
       channel.sendToQueue(`${queue}.parked`, msg.content, { persistent: true, headers: { "x-parked-reason": reason } }, (err) => (err ? reject(err) : resolve(undefined))),
     );
 
+  // Ack only once the parked copy is confirmed. If parking fails, put the message back instead of leaving it
+  // unacknowledged, which would use up a prefetch slot for good and quietly stop the consumer.
+  const parkThenAck = async (channel, msg, reason) => {
+    try {
+      await park(channel, msg, reason);
+      channel.ack(msg);
+    } catch (err) {
+      logger.error({ err: err.message }, "could not park message; requeueing it");
+      channel.nack(msg, false, true);
+    }
+  };
+
   const onMessage = async (channel, msg) => {
     if (!msg) return;
     let event;
     try {
       event = JSON.parse(msg.content.toString());
     } catch {
-      await park(channel, msg, "malformed json");
-      return channel.ack(msg);
+      return parkThenAck(channel, msg, "malformed json");
     }
     // Number of earlier failed attempts, counted by RabbitMQ in the x-death header.
     const deaths = (msg.properties.headers?.["x-death"] ?? []).find((d) => d.queue === queue && d.reason === "rejected")?.count ?? 0;
@@ -195,8 +206,7 @@ export function startConsumer({ url, logger, queue, bindings, handler, prefetch 
       const permanent = err instanceof PermanentError;
       if (permanent || deaths + 1 >= maxAttempts) {
         logger.error({ eventId: event?.id, type: event?.type, permanent, err: err.message }, "message parked");
-        await park(channel, msg, permanent ? err.message : "max attempts reached");
-        channel.ack(msg);
+        await parkThenAck(channel, msg, permanent ? err.message : "max attempts reached");
       } else {
         logger.warn({ eventId: event?.id, type: event?.type, attempt: deaths + 1, err: err.message }, "handler failed; will retry");
         channel.nack(msg, false, false); // dead-letters into the retry queue

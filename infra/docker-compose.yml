@@ -166,6 +166,32 @@ services:
       inventory-service: { condition: service_healthy }
       payment-service: { condition: service_healthy }
 
+  ticket-service:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      args: { SERVICE: ticket-service }
+    environment:
+      PORT: 3007
+      DATABASE_URL: postgres://${POSTGRES_USER:-authentix}:${POSTGRES_PASSWORD}@postgres:5432/ticket
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-authentix}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set in .env}
+      QR_MASTER_KEY: ${QR_MASTER_KEY:?set in .env}
+      SCAN_GRACE_SECONDS: ${SCAN_GRACE_SECONDS:-120}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      AADHAAR_SERVICE_URL: http://aadhaar-service:3002
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      BOOKING_SERVICE_URL: http://booking-service:3005
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3007/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      auth-service: { condition: service_healthy }
+
   auth-service:
     build:
       context: ..
@@ -202,6 +228,7 @@ services:
       CATALOG_SERVICE_URL: http://catalog-service:3003
       INVENTORY_SERVICE_URL: http://inventory-service:3004
       BOOKING_SERVICE_URL: http://booking-service:3005
+      TICKET_SERVICE_URL: http://ticket-service:3007
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:5173
     ports:
@@ -217,6 +244,7 @@ services:
       catalog-service: { condition: service_healthy }
       inventory-service: { condition: service_healthy }
       booking-service: { condition: service_healthy }
+      ticket-service: { condition: service_healthy }
       redis: { condition: service_healthy }
 
   web:

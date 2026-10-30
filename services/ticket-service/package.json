@@ -1,0 +1,20 @@
+{
+  "name": "@authentix/ticket-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "node --check src/index.js && node --check src/app.js && node --check src/db.js && node --check src/qr.js && node --check src/issue.js && node --check src/admission.js && node --check src/clients.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@authentix/events": "workspace:*",
+    "@authentix/internal": "workspace:*",
+    "@authentix/logger": "workspace:*",
+    "@authentix/schemas": "workspace:*",
+    "fastify": "^5.0.0",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  }
+}
